@@ -32,11 +32,11 @@ Demo 不实现：
 
 ## 文档
 
-- `docs/prd.md`：Demo 业务需求权威文档。
+- `docs/prd.md`：唯一需求读写入口，包含从 Word PRD 整理后的完整业务口径。
 - `docs/db-schema.md`：数据模型目标。
 - `docs/TASKS.md`：任务、验收标准和进度。
 - `docs/AGENTS.md`：AI 开发约束和会话协议。
-- `docs/Duty Time Advice prd V1.docx`：面向业务的 Word PRD。
+- `docs/Duty Time Advice prd V1.docx`：面向业务的需求来源与归档材料，日常开发直接读取 `docs/prd.md`。
 
 ## 界面规范
 

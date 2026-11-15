@@ -6,7 +6,7 @@
 
 | 任务 ID | 状态 | 任务名称 | 验收标准 |
 | --- | --- | --- | --- |
-| T000 | ✅ Done | 需求与数据模型收敛 | 1. 统一 `Rosterability`、`ROSTERABLE`、`UNROSTERABLE`及可排/不可排术语；2. 明确截止锁定、跨午夜归属和基线合法矩阵；3. 明确周期模板、定时生成、模拟班次冲突与 Demo 边界；4. Word PRD、Markdown PRD、数据库字段和任务文档同步 |
+| T000 | ✅ Done | 需求与数据模型收敛 | 1. 统一 `Rosterability`、`ROSTERABLE`、`UNROSTERABLE`及可排/不可排术语；2. 明确截止锁定、跨午夜归属和基线合法矩阵；3. 明确周期模板、定时生成、模拟班次冲突与 Demo 边界；4. 以 `docs/prd.md` 作为唯一需求读写入口，并同步数据库字段和任务边界 |
 | T001 | ✅ Done | 后端基建、Prisma 模型与种子数据 | 1. 数据库改为本地 SQLite（Prisma 7 + `@prisma/adapter-better-sqlite3`）；依赖锁定为稳定且互相兼容的版本（prisma 与 @prisma/client 同为 7.10.1、TypeScript 5.9.x、@types/node 24.x），补齐 scripts、测试框架、定时任务、香港时区日期库，开发依赖归位；2. Express + TypeScript 项目可编译、可启动，提供健康检查，统一返回 `{code,msg,data}`，含 `src/types/enums.ts`；3. 按 `db-schema.md` 重写 `schema.prisma`：枚举改为 `DtaRosterabilityStatus`（不含 `LOCKED`）、表名与字段对齐、删除日期标签/导入任务表和 `group_code`、新增 `dta_mock_shift`、`post_code`、`weekday`、`end_day_offset`、`template_item_id`、审计表 `status_code`/`source_code`、按 SQLite 类型约定（日期/时间用字符串）、`tenant_id` 唯一约束与索引，`prisma` 校验通过；4. 实现 Mock 身份中间件（`x-mock-role`、`x-mock-user-id`、`x-mock-org-id`），无需登录；5. 本地 SQLite 迁移可重复执行，`dev.db` 不入版本库；6. 种子数据包含 1 个租户、2 个组织、全职/兼职员工、岗位与员工类型编码、状态字典、来源字典、参数组、主管/管理员固定账号、系统账号与模拟班次；7. 不创建日期标签和导入任务数据 |
 | T002 | 🟢 Current | 字典、参数组和模拟班次接口 | 1. 状态和来源字典查询及展示属性维护，不允许新增未定义编码；2. `dta_param_group` CRUD；3. 前后端共用的基线合法矩阵校验；4. 生成范围限制 1至10 周，生成星期和时间必填；5. 三个预留开关固定为 0；6. 模拟班次 CRUD 与 `duration_minutes` 校验；7. 统一返回 `{code,msg,data}` 并写审计日志 |
 | T003 | 🟡 Pending | 周期模板、条件匹配与周期生成 | 1. 模板主表、周一至周日明细、条件 CRUD；2. 明细支持多时段与跨午夜；3. 仅按组织、员工类型、岗位匹配；4. 每周按预设时点生成未来 1至10 周记录；5. 支持主管手动补生成；6. 按“员工+业务日+`template_item_id`”幂等去重，已存在（含已删除、已人工修改）不再生成；7. 目标日已锁定、或 `UNROSTERABLE` 遇当日班次时跳过并在日志备注原因；8. `source_code=TEMPLATE_GEN`、回填 `template_id` 与 `template_item_id`，系统账号写日志 |

@@ -2,15 +2,9 @@
 
 > 目标：交付可演示的排班时间报备 Demo，并保留标准产品扩展说明；不做生产级高并发、真实消息、审批、场地或特殊日期差异化。
 
-## 1. 权威文档顺序
+## 1. 权威文档规则
 
-冲突时按以下顺序执行：
-
-1. `docs/prd.md`：Demo 产品需求和业务规则。
-2. `docs/db-schema.md`：数据结构目标。
-3. `backend/prisma/schema.prisma`：当前实现，必须在 T001 中与前两项同步后才能迁移。
-4. `docs/TASKS.md`：开发顺序、验收标准和进度。
-5. `docs/Duty Time Advice prd V1.docx`：面向业务的需求说明，与 Markdown PRD 保持口径一致。
+`docs/prd.md` 是唯一需求读写入口，后续开发、评审、测试和实现都直接读取和更新该文件。Word PRD `docs/Duty Time Advice prd V1.docx` 是需求来源和归档材料；需求已经整理进 `prd.md` 后，不再把 Word 文档作为日常开发输入。数据结构目标读取 `docs/db-schema.md`，开发顺序读取 `docs/TASKS.md`，实现状态以代码为准；若实现与需求冲突，先按 `prd.md` 修正实现或提出明确冲突。
 
 ## 2. 强制术语
 
