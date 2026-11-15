@@ -4,6 +4,9 @@ import { errorHandler, notFoundHandler } from "./middleware/errorHandler";
 import { mockIdentity } from "./middleware/mockIdentity";
 import { healthRouter } from "./routes/health";
 import { meRouter } from "./routes/me";
+import { dictionariesRouter } from "./routes/dictionaries";
+import { paramGroupsRouter } from "./routes/paramGroups";
+import { mockShiftsRouter } from "./routes/mockShifts";
 
 export function createApp(): Express {
   const app = express();
@@ -16,6 +19,9 @@ export function createApp(): Express {
   // 其余业务接口统一要求 Mock 身份
   app.use("/api", mockIdentity);
   app.use("/api/me", meRouter);
+  app.use("/api/dictionaries", dictionariesRouter);
+  app.use("/api/param-groups", paramGroupsRouter);
+  app.use("/api/mock-shifts", mockShiftsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
