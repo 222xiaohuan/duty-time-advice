@@ -1,0 +1,34 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: #ffffff;
+    --foreground: #0f172a;
+
+    --card: #ffffff;
+    --card-foreground: #0f172a;
+
+    --primary: #0C336A; /* HKJC马会官方主色，对齐系统导航栏 */
+    --primary-foreground: #ffffff;
+
+    --rosterable: #228B22;
+    --unrosterable: #dc2626;
+    --standby: #f59e0b;
+    --locked: #6b7280;
+
+    --muted: #f1f5f9;
+    --muted-foreground: #64748b;
+    --border: #e2e8f0;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}

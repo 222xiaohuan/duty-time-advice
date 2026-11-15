@@ -1,0 +1,325 @@
+// Duty Time Advice Demo · 数据模型
+// 权威来源：docs/db-schema.md。数据库为本地 SQLite。
+// 约定：表名与列名为下划线命名（@@map / @map），TypeScript 字段为驼峰命名。
+// 业务日期使用 "YYYY-MM-DD" 字符串，日内时间使用 "HH:mm" 字符串，时间点使用 DateTime（UTC 存储，按 Asia/Hong_Kong 解释）。
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ===================== 公共枚举 =====================
+
+/// 可排性状态。locked 是独立只读标记，不属于本枚举。
+enum DtaRosterabilityStatus {
+  ROSTERABLE
+  UNROSTERABLE
+  STANDBY // 标准产品预留，Demo 默认不启用
+}
+
+enum DtaSourceCode {
+  EMP_SUBMIT
+  MGR_MAINTENANCE
+  TEMPLATE_GEN
+  EXTERNAL_SYNC // 预留
+  BULK_IMPORT // 预留
+}
+
+enum DtaBaselineRule {
+  BASE_ROSTERABLE
+  BASE_UNROSTERABLE
+}
+
+enum DtaSubmitMode {
+  MODE_ONLY_UNROSTERABLE
+  MODE_ONLY_ROSTERABLE
+  MODE_ALL_STATUS
+  MODE_NO_SUBMIT
+}
+
+enum DtaConflictCheckMode {
+  STRONG_BLOCK // Demo 固定
+  WARN_WITH_EXEMPT // 标准产品预留
+}
+
+/// 仅作结构预留，Demo 不写入。
+enum DtaApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum DtaAuditActionCode {
+  CREATE
+  UPDATE
+  DELETE
+  PARAM_CHANGE
+  TEMPLATE_GEN
+  BULK_IMPORT // 预留
+  EXTERNAL_SYNC // 预留
+  SUBMIT_APPROVAL // 预留
+  APPROVE_PASS // 预留
+  APPROVE_REJECT // 预留
+}
+
+// ===================== 租户 / 组织 / 模拟员工 =====================
+
+model DtaTenant {
+  id         Int      @id @default(autoincrement())
+  tenantName String   @map("tenant_name")
+  isDeleted  Int      @default(0) @map("is_deleted")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  createdBy  Int      @map("created_by")
+  updatedBy  Int      @map("updated_by")
+
+  @@map("dta_tenant")
+}
+
+model DtaOrg {
+  id         Int      @id @default(autoincrement())
+  tenantId   Int      @map("tenant_id")
+  orgName    String   @map("org_name")
+  isDeleted  Int      @default(0) @map("is_deleted")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  createdBy  Int      @map("created_by")
+  updatedBy  Int      @map("updated_by")
+
+  @@index([tenantId, isDeleted])
+  @@map("dta_org")
+}
+
+model DtaEmployee {
+  id          Int      @id @default(autoincrement())
+  tenantId    Int      @map("tenant_id")
+  orgId       Int      @map("org_id")
+  empName     String   @map("emp_name")
+  empTypeCode String   @map("emp_type_code")
+  postCode    String   @map("post_code")
+  isDeleted   Int      @default(0) @map("is_deleted")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdBy   Int      @map("created_by")
+  updatedBy   Int      @map("updated_by")
+
+  @@index([tenantId, orgId, isDeleted])
+  @@map("dta_employee")
+}
+
+// ===================== 字典主数据 =====================
+
+model DtaRosterabilityStatusDict {
+  id            Int                    @id @default(autoincrement())
+  tenantId      Int                    @map("tenant_id")
+  statusCode    DtaRosterabilityStatus @map("status_code")
+  statusName    String                 @map("status_name")
+  nameI18n      String?                @map("name_i18n")
+  colorHex      String?                @map("color_hex")
+  allowSchedule Int                    @map("allow_schedule")
+  empSelfEdit   Int                    @map("emp_self_edit")
+  enabled       Int
+  isDeleted     Int                    @default(0) @map("is_deleted")
+  createdAt     DateTime               @default(now()) @map("created_at")
+  updatedAt     DateTime               @updatedAt @map("updated_at")
+  createdBy     Int                    @map("created_by")
+  updatedBy     Int                    @map("updated_by")
+
+  @@unique([tenantId, statusCode])
+  @@map("dta_rosterability_status_dict")
+}
+
+model DtaRosterabilitySourceDict {
+  id         Int           @id @default(autoincrement())
+  tenantId   Int           @map("tenant_id")
+  sourceCode DtaSourceCode @map("source_code")
+  sourceName String        @map("source_name")
+  nameI18n   String?       @map("name_i18n")
+  iconKey    String?       @map("icon_key")
+  enabled    Int
+  isDeleted  Int           @default(0) @map("is_deleted")
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+  createdBy  Int           @map("created_by")
+  updatedBy  Int           @map("updated_by")
+
+  @@unique([tenantId, sourceCode])
+  @@map("dta_rosterability_source_dict")
+}
+
+// ===================== 参数组：租户 + 组织 + 员工类型 =====================
+
+model DtaParamGroup {
+  id                    Int                  @id @default(autoincrement())
+  tenantId              Int                  @map("tenant_id")
+  orgId                 Int                  @map("org_id")
+  empTypeCode           String               @map("emp_type_code")
+  cutoffDays            Int                  @map("cutoff_days") // 0 至 30
+  baselineRule          DtaBaselineRule      @map("baseline_rule")
+  submitMode            DtaSubmitMode        @map("submit_mode")
+  empEditEnable         Int                  @map("emp_edit_enable")
+  templateAutoGenEnable Int                  @map("template_auto_gen_enable")
+  autoGenRangeWeek      Int?                 @map("auto_gen_range_week") // 1 至 10
+  autoGenWeekday        Int?                 @map("auto_gen_weekday") // 1 至 7
+  autoGenTime           String?              @map("auto_gen_time") // "HH:mm"，香港时间
+  conflictCheckMode     DtaConflictCheckMode @default(STRONG_BLOCK) @map("conflict_check_mode")
+  fieldSiteEnable       Int                  @default(0) @map("field_site_enable") // 预留，Demo 固定 0
+  enableApproval        Int                  @default(0) @map("enable_approval") // 预留，Demo 固定 0
+  specialTagDiffEnable  Int                  @default(0) @map("special_tag_diff_enable") // 预留，Demo 固定 0
+  isDeleted             Int                  @default(0) @map("is_deleted")
+  createdAt             DateTime             @default(now()) @map("created_at")
+  updatedAt             DateTime             @updatedAt @map("updated_at")
+  createdBy             Int                  @map("created_by")
+  updatedBy             Int                  @map("updated_by")
+
+  @@unique([tenantId, orgId, empTypeCode])
+  @@map("dta_param_group")
+}
+
+// ===================== 周期模板 =====================
+
+model DtaTemplate {
+  id           Int      @id @default(autoincrement())
+  tenantId     Int      @map("tenant_id")
+  templateName String   @map("template_name")
+  nameI18n     String?  @map("name_i18n")
+  startDate    String   @map("start_date") // "YYYY-MM-DD"
+  endDate      String?  @map("end_date") // "YYYY-MM-DD"
+  enabled      Int
+  isDeleted    Int      @default(0) @map("is_deleted")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+  createdBy    Int      @map("created_by")
+  updatedBy    Int      @map("updated_by")
+
+  @@index([tenantId, isDeleted])
+  @@map("dta_template")
+}
+
+model DtaTemplateItem {
+  id           Int                    @id @default(autoincrement())
+  tenantId     Int                    @map("tenant_id")
+  templateId   Int                    @map("template_id")
+  weekday      Int // 1 至 7，1 为周一
+  statusCode   DtaRosterabilityStatus @map("status_code")
+  startTime    String                 @map("start_time") // "HH:mm"
+  endTime      String                 @map("end_time") // "HH:mm"
+  endDayOffset Int                    @default(0) @map("end_day_offset") // 0 同日，1 次日
+  remark       String?
+  siteCode     String?                @map("site_code") // 场地预留
+  isDeleted    Int                    @default(0) @map("is_deleted")
+  createdAt    DateTime               @default(now()) @map("created_at")
+  updatedAt    DateTime               @updatedAt @map("updated_at")
+  createdBy    Int                    @map("created_by")
+  updatedBy    Int                    @map("updated_by")
+
+  @@index([tenantId, templateId, isDeleted])
+  @@map("dta_template_item")
+}
+
+model DtaTemplateCondition {
+  id          Int      @id @default(autoincrement())
+  tenantId    Int      @map("tenant_id")
+  templateId  Int      @map("template_id")
+  priority    Int // 数字越小优先级越高
+  orgId       Int?     @map("org_id")
+  empTypeCode String?  @map("emp_type_code")
+  postCode    String?  @map("post_code")
+  isDeleted   Int      @default(0) @map("is_deleted")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdBy   Int      @map("created_by")
+  updatedBy   Int      @map("updated_by")
+
+  @@index([tenantId, templateId, isDeleted])
+  @@map("dta_template_condition")
+}
+
+// ===================== 可排性记录 =====================
+
+model DtaRosterabilityRecord {
+  id             Int                    @id @default(autoincrement())
+  tenantId       Int                    @map("tenant_id")
+  orgId          Int                    @map("org_id")
+  empId          Int                    @map("emp_id")
+  empTypeCode    String                 @map("emp_type_code") // 员工类型快照
+  businessDate   String                 @map("business_date") // "YYYY-MM-DD"，开始时间所在日期
+  statusCode     DtaRosterabilityStatus @map("status_code")
+  sourceCode     DtaSourceCode          @map("source_code")
+  startTime      DateTime               @map("start_time")
+  endTime        DateTime               @map("end_time") // 可跨午夜
+  remark         String?
+  siteCode       String?                @map("site_code") // 场地预留
+  approvalStatus DtaApprovalStatus?     @map("approval_status") // 审批预留
+  approverId     Int?                   @map("approver_id") // 审批预留
+  approvedAt     DateTime?              @map("approved_at") // 审批预留
+  approveComment String?                @map("approve_comment") // 审批预留
+  locked         Int                    @default(0) // 展示用缓存，只读以实时计算为准
+  templateId     Int?                   @map("template_id")
+  templateItemId Int?                   @map("template_item_id") // 模板生成去重
+  externalSyncId String?                @map("external_sync_id") // 外部同步预留
+  isDeleted      Int                    @default(0) @map("is_deleted")
+  createdAt      DateTime               @default(now()) @map("created_at")
+  updatedAt      DateTime               @updatedAt @map("updated_at")
+  createdBy      Int                    @map("created_by")
+  updatedBy      Int                    @map("updated_by")
+
+  @@index([tenantId, empId, businessDate, isDeleted])
+  @@index([tenantId, empId, businessDate, templateItemId])
+  @@map("dta_rosterability_record")
+}
+
+// ===================== Demo 模拟工作班次 =====================
+
+model DtaMockShift {
+  id              Int      @id @default(autoincrement())
+  tenantId        Int      @map("tenant_id")
+  orgId           Int      @map("org_id")
+  empId           Int      @map("emp_id")
+  businessDate    String   @map("business_date") // "YYYY-MM-DD"，班次开始日期
+  shiftName       String   @map("shift_name")
+  startTime       DateTime @map("start_time")
+  endTime         DateTime @map("end_time")
+  durationMinutes Int      @map("duration_minutes") // 必须 >= 0
+  isDeleted       Int      @default(0) @map("is_deleted")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdBy       Int      @map("created_by")
+  updatedBy       Int      @map("updated_by")
+
+  @@index([tenantId, empId, businessDate, isDeleted])
+  @@map("dta_mock_shift")
+}
+
+// ===================== 审计日志（追加写入，不可修改） =====================
+
+model DtaAuditLog {
+  id              Int                     @id @default(autoincrement())
+  tenantId        Int                     @map("tenant_id")
+  orgId           Int?                    @map("org_id")
+  empId           Int?                    @map("emp_id")
+  businessDate    String?                 @map("business_date") // "YYYY-MM-DD"
+  targetType      String                  @map("target_type") // record / param / template / condition / mock_shift
+  targetId        Int                     @map("target_id")
+  actionCode      DtaAuditActionCode      @map("action_code")
+  statusCode      DtaRosterabilityStatus? @map("status_code") // 仅 record 日志填写
+  sourceCode      DtaSourceCode?          @map("source_code") // 仅 record 日志填写
+  beforeJson      String?                 @map("before_json")
+  afterJson       String?                 @map("after_json")
+  operatorId      Int                     @map("operator_id")
+  operateTime     DateTime                @default(now()) @map("operate_time")
+  operateSource   String                  @map("operate_source") // employee / manager / admin / system
+  remark          String?
+  siteCode        String?                 @map("site_code") // 场地预留
+  approvalRelated Int                     @default(0) @map("approval_related") // 审批预留
+  createdAt       DateTime                @default(now()) @map("created_at")
+
+  @@index([tenantId, operateTime])
+  @@index([tenantId, orgId, empId])
+  @@map("dta_audit_log")
+}
