@@ -167,8 +167,8 @@ export function ManagerDayTimeline({ day, employees, records, shifts, statuses, 
         return <div className="manager-day-grid-row" key={employee.id}>
           <div className="manager-day-person"><strong>{employee.empName}</strong><small>{locked ? "只读" : `${labelOf(employeeTypes, employee.empTypeCode)} · ${labelOf(posts, employee.postCode)}`}</small><Button type="button" variant="ghost" size="icon" title={`为${employee.empName}新增时段`} aria-label={`为${employee.empName}新增时段`} disabled={locked || !statusCode} onClick={() => openNew(employee)}><Plus size={15} /></Button></div>
           <div className={`manager-day-row-body ${locked ? "locked" : ""}`}>
-            <div className={`manager-day-track ${baseline ? `baseline-${baseline}` : ""}`} style={{ height: `${Math.max(42, lanes * 30 + 12)}px` }} onPointerDown={(event) => pointerDown(event, employee)} onPointerMove={pointerMove} onPointerUp={(event) => pointerUp(event, employee)} onPointerCancel={() => { dragRef.current = null; setDrag(null); }} aria-label={`${employee.empName} ${day} 时间轴${baselineText ? `，${baselineText}` : ""}`}>
-              {baselineText && [0, 25, 50, 75].map((left) => <span className="manager-day-baseline-mark" style={{ left: `${left}%` }} aria-hidden="true" key={left}>{baselineText}</span>)}
+            <div className={`manager-day-track ${baseline ? `baseline-${baseline}` : ""}`} style={{ height: `${Math.max(54, lanes * 30 + 24)}px` }} onPointerDown={(event) => pointerDown(event, employee)} onPointerMove={pointerMove} onPointerUp={(event) => pointerUp(event, employee)} onPointerCancel={() => { dragRef.current = null; setDrag(null); }} aria-label={`${employee.empName} ${day} 时间轴${baselineText ? `，${baselineText}` : ""}`}>
+              {baselineText && <span className="manager-day-baseline-mark" aria-hidden="true">{baselineText}</span>}
               {dayRecords.map(({ item, start, end, lane, continued }) => {
                 const status = statuses.find((value) => value.statusCode === item.statusCode);
                 const color = status?.colorHex ?? defaultColor(item.statusCode);
