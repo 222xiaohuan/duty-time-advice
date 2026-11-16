@@ -127,4 +127,28 @@ describe("T003 模板维护与经理生成", () => {
     expect((await request(app).delete(`/api/templates/${id}`).set(admin)).body.data.isDeleted).toBe(1);
     expect((await request(app).get(`/api/templates/${id}`).set(admin)).status).toBe(404);
   });
+
+  it("按每名员工的 1 周和 12 周配置限定实际生成范围", async () => {
+    const by = { createdBy: 9001, updatedBy: 9001 };
+    await prisma.dtaEmployee.create({ data: { id: 201, tenantId: 1, orgId: 1, empName: "Range employee", empTypeCode: "PART_TIME", postCode: "CUSTOMER_SERVICE", ...by } });
+    const param = await prisma.dtaParamGroup.create({ data: {
+      tenantId: 1, orgId: 1, empTypeCode: "PART_TIME", cutoffDays: 0,
+      baselineRule: DtaBaselineRule.BASE_UNROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_ROSTERABLE,
+      empEditEnable: 1, templateAutoGenEnable: 0, autoGenRangeWeek: 1,
+      conflictCheckMode: DtaConflictCheckMode.STRONG_BLOCK, ...by,
+    } });
+    const template = await request(app).post("/api/templates").set(admin).send({ templateName: "周数边界模板", startDate: "2026-01-01" });
+    const id = template.body.data.id;
+    const item = await request(app).post(`/api/templates/${id}/items`).set(admin).send({ weekday: 1, statusCode: "ROSTERABLE", startTime: "09:00", endTime: "10:00" });
+    await request(app).post(`/api/templates/${id}/conditions`).set(admin).send({ priority: 0, orgId: 1, empTypeCode: "PART_TIME", postCode: "CUSTOMER_SERVICE" });
+    await generateForManager(1, 9101, now);
+    const where = { empId: 201, templateItemId: item.body.data.id };
+    expect(await prisma.dtaRosterabilityRecord.count({ where })).toBe(1);
+    expect(await prisma.dtaRosterabilityRecord.count({ where: { ...where, businessDate: "2026-11-23" } })).toBe(0);
+    await prisma.dtaParamGroup.update({ where: { id: param.id }, data: { autoGenRangeWeek: 12 } });
+    await generateForManager(1, 9101, now);
+    expect(await prisma.dtaRosterabilityRecord.count({ where })).toBe(12);
+    expect(await prisma.dtaRosterabilityRecord.count({ where: { ...where, businessDate: "2027-02-01" } })).toBe(1);
+    expect(await prisma.dtaRosterabilityRecord.count({ where: { ...where, businessDate: "2027-02-08" } })).toBe(0);
+  });
 });
