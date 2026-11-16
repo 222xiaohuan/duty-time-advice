@@ -9,6 +9,8 @@ export const paramGroupsRouter = Router();
 
 function payload(body: Record<string, unknown>, current?: Record<string, unknown>) {
   const merged = { ...(current ?? {}), ...body };
+  if (body.autoGenWeekday !== undefined && body.autoGenWeekday !== null) bad("Demo 不配置定时生成星期");
+  if (body.autoGenTime !== undefined && body.autoGenTime !== null) bad("Demo 不配置定时生成时间");
   const orgId = parseId(merged.orgId, "orgId");
   const empTypeCode = merged.empTypeCode;
   if (!isEmployeeType(empTypeCode)) bad("empTypeCode 不是 Demo 支持的员工类型");
@@ -19,10 +21,10 @@ function payload(body: Record<string, unknown>, current?: Record<string, unknown
     baselineRule: parseEnum(merged.baselineRule, Object.values(DtaBaselineRule), "baselineRule"),
     submitMode: parseEnum(merged.submitMode, Object.values(DtaSubmitMode), "submitMode"),
     empEditEnable: parseFlag(merged.empEditEnable, "empEditEnable"),
-    templateAutoGenEnable: parseFlag(merged.templateAutoGenEnable, "templateAutoGenEnable"),
+    templateAutoGenEnable: body.templateAutoGenEnable === undefined ? 0 : parseFlag(body.templateAutoGenEnable, "templateAutoGenEnable"),
     autoGenRangeWeek: merged.autoGenRangeWeek === null || merged.autoGenRangeWeek === undefined ? null : Number(merged.autoGenRangeWeek),
-    autoGenWeekday: merged.autoGenWeekday === null || merged.autoGenWeekday === undefined ? null : Number(merged.autoGenWeekday),
-    autoGenTime: merged.autoGenTime === null || merged.autoGenTime === undefined ? null : String(merged.autoGenTime),
+    autoGenWeekday: null,
+    autoGenTime: null,
     conflictCheckMode: parseEnum(merged.conflictCheckMode ?? DtaConflictCheckMode.STRONG_BLOCK, Object.values(DtaConflictCheckMode), "conflictCheckMode"),
     fieldSiteEnable: parseFlag(merged.fieldSiteEnable, "fieldSiteEnable", 0),
     enableApproval: parseFlag(merged.enableApproval, "enableApproval", 0),

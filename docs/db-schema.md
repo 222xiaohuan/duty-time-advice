@@ -162,10 +162,10 @@ Demo 不增加班组、职级或自定义字段。
 | baseline_rule | enum | `DtaBaselineRule` |
 | submit_mode | enum | `DtaSubmitMode` |
 | emp_edit_enable | int | 员工自主编辑开关 |
-| template_auto_gen_enable | int | 模板周期生成开关 |
-| auto_gen_range_week | int | 1至10，开关关闭时可为 null |
-| auto_gen_weekday | int | 1至7，开关关闭时可为 null |
-| auto_gen_time | text(HH:mm) | 香港时间，开关关闭时可为 null |
+| template_auto_gen_enable | int | 定时生成预留；Demo 固定为 0 |
+| auto_gen_range_week | int | 经理手动生成周数，Demo 必填，1 至 12；沿用现有字段名 |
+| auto_gen_weekday | int | 定时生成预留；Demo 固定为 null |
+| auto_gen_time | text(HH:mm) | 定时生成预留；Demo 固定为 null |
 | conflict_check_mode | enum | Demo 固定 `STRONG_BLOCK` |
 | field_site_enable | int | 预留，默认 0 |
 | enable_approval | int | 预留，默认 0 |

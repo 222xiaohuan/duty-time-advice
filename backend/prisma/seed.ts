@@ -69,7 +69,7 @@ async function main() {
     data: [
       { tenantId, sourceCode: DtaSourceCode.EMP_SUBMIT, sourceName: "员工提交", nameI18n: JSON.stringify({ en: "Employee Submission" }), iconKey: "user", enabled: 1, ...by },
       { tenantId, sourceCode: DtaSourceCode.MGR_MAINTENANCE, sourceName: "主管维护", nameI18n: JSON.stringify({ en: "Manager Maintenance" }), iconKey: "shield", enabled: 1, ...by },
-      { tenantId, sourceCode: DtaSourceCode.TEMPLATE_GEN, sourceName: "模板自动生成", nameI18n: JSON.stringify({ en: "Template Generation" }), iconKey: "repeat", enabled: 1, ...by },
+      { tenantId, sourceCode: DtaSourceCode.TEMPLATE_GEN, sourceName: "模板生成", nameI18n: JSON.stringify({ en: "Template Generation" }), iconKey: "repeat", enabled: 1, ...by },
       { tenantId, sourceCode: DtaSourceCode.EXTERNAL_SYNC, sourceName: "外部接口同步", nameI18n: JSON.stringify({ en: "External Sync" }), iconKey: "link", enabled: 0, ...by },
       { tenantId, sourceCode: DtaSourceCode.BULK_IMPORT, sourceName: "批量导入", nameI18n: JSON.stringify({ en: "Bulk Import" }), iconKey: "upload", enabled: 0, ...by },
     ],
@@ -81,7 +81,7 @@ async function main() {
       data: {
         tenantId, orgId, empTypeCode: EMP_TYPE_CODES.FULL_TIME,
         cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_ROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_UNROSTERABLE,
-        empEditEnable: 1, templateAutoGenEnable: 1, autoGenRangeWeek: 4, autoGenWeekday: 1, autoGenTime: "02:00",
+        empEditEnable: 1, templateAutoGenEnable: 0, autoGenRangeWeek: 4, autoGenWeekday: null, autoGenTime: null,
         conflictCheckMode: DtaConflictCheckMode.STRONG_BLOCK, ...by,
       },
     });
@@ -89,7 +89,7 @@ async function main() {
       data: {
         tenantId, orgId, empTypeCode: EMP_TYPE_CODES.PART_TIME,
         cutoffDays: 2, baselineRule: DtaBaselineRule.BASE_UNROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_ROSTERABLE,
-        empEditEnable: 1, templateAutoGenEnable: 1, autoGenRangeWeek: 4, autoGenWeekday: 1, autoGenTime: "02:00",
+        empEditEnable: 1, templateAutoGenEnable: 0, autoGenRangeWeek: 4, autoGenWeekday: null, autoGenTime: null,
         conflictCheckMode: DtaConflictCheckMode.STRONG_BLOCK, ...by,
       },
     });

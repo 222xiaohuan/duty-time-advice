@@ -68,10 +68,10 @@ Demo 使用 Mock 角色、模拟员工与模拟班次，重点演示组织与员
 | `baseline_rule` | `BASE_ROSTERABLE` / `BASE_UNROSTERABLE` |
 | `submit_mode` | 四种提报模式，受基线联动校验 |
 | `emp_edit_enable` | 是否允许员工自主编辑 |
-| `template_auto_gen_enable` | 是否启用模板周期生成 |
-| `auto_gen_range_week` | 生成未来周数，取值 1至10 |
-| `auto_gen_weekday` | 每周生成任务的运行星期，1至7 |
-| `auto_gen_time` | 每周生成任务的运行时间，按 `Asia/Hong_Kong` |
+| `template_auto_gen_enable` | 定时生成预留，Demo 固定为 0 |
+| `auto_gen_range_week` | 经理手动生成未来完整周数，页面可配置 1 至 12，必填 |
+| `auto_gen_weekday` | 定时生成预留，Demo 固定为空 |
+| `auto_gen_time` | 定时生成预留，Demo 固定为空 |
 | `conflict_check_mode` | Demo 固定 `STRONG_BLOCK`；豁免模式仅作标准产品预留 |
 | `field_site_enable` | 预留，Demo 固定关闭 |
 | `enable_approval` | 预留，Demo 固定关闭 |
@@ -133,15 +133,16 @@ Demo 仅使用以下员工属性匹配模板：
 
 ### 5.3 生成规则
 
-- 每周在参数设定的星期与时间自动执行生成任务。
-- 按当前有效条件重新匹配员工，生成未来 1至10 周的记录。
+- Demo 不运行定时生成任务。管理员在组织与员工类型参数页配置 `auto_gen_range_week`，取值 1 至 12。
+- 经理在所辖组织的可排性视图顶部操作区点击“生成可排时段”。后端按每名员工所属组织与员工类型的参数值，从下一个完整自然周（香港时间周一 00:00）起，生成未来对应周数的记录；不要求经理在点击时再次输入周数。
+- 点击时按当前有效的组织、员工类型和岗位条件重新匹配每名员工的模板，按优先级选择实际关联模板；仅对经理所辖组织的员工生成，不使用其他组织的数据。
 - 生成记录的 `source_code=TEMPLATE_GEN`，并回填 `template_id`。
 - 生成记录回填 `template_id` 和 `template_item_id`。
 - 去重键为“租户 + 员工 + 业务日期 + `template_item_id`”，**不区分是否已软删除**：该键已存在记录（含已人工修改、已被删除的记录）时不再重新生成。
 - 员工或主管已人工修改的记录不被后续周期任务覆盖。
 - 目标业务日期已到截止时间（已锁定）时跳过；标准产品应在审计备注中记录跳过原因。
 - 生成 `UNROSTERABLE` 记录时，同员工同业务日存在时长大于 0 的模拟班次则跳过该条；标准产品应在审计备注中记录跳过原因。
-- 主管页保留手动生成按钮，用于 Demo 演示和补生成。
+- 经理页生成按钮展示生成结果：成功新增数、已存在跳过数、锁定跳过数、班次冲突跳过数及对应员工和日期的原因。重复点击不得重复生成。
 - Demo 不写入审计日志；标准产品的自动与手动生成应写入审计日志，自动生成的操作人为固定系统账号。
 
 ### 5.4 模板微调与覆盖策略
@@ -292,9 +293,9 @@ Demo 不实现审计/操作日志接口、页面或写入逻辑。以下内容�
 | `baseline_rule` | 组织与员工类型 | `BASE_ROSTERABLE` / `BASE_UNROSTERABLE` | 全职可排、兼职不可排仅为示例 |
 | `submit_mode` | 组织与员工类型 | 四类模式，受基线矩阵约束 | 与基线相反的提报模式 |
 | `emp_edit_enable` | 组织与员工类型 | 允许 / 禁止 | 允许 |
-| `template_auto_gen_enable` | 组织与员工类型 | 启用 / 关闭 | 启用 |
-| `auto_gen_range_week` | 组织与员工类型 | 1至10周 | 4周 |
-| `auto_gen_weekday` + `auto_gen_time` | 组织与员工类型 | 星期1至7 + 香港时间 | 按业务配置 |
+| `template_auto_gen_enable` | 组织与员工类型 | Demo 固定关闭，标准产品预留 | 关闭 |
+| `auto_gen_range_week` | 组织与员工类型 | 1 至 12 周，手动生成时使用 | 4 周 |
+| `auto_gen_weekday` + `auto_gen_time` | 组织与员工类型 | Demo 固定为空，标准产品预留 | 空 |
 | `conflict_check_mode` | 组织与员工类型 | Demo 固定 `STRONG_BLOCK` | 强拦截 |
 | `field_site_enable` | 租户 | 固定关闭 | 关闭 |
 | `enable_approval` | 组织与员工类型 | 固定关闭 | 关闭 |
@@ -318,6 +319,6 @@ Demo 不实现审计/操作日志接口、页面或写入逻辑。以下内容�
 
 ## 16. Demo 验收边界
 
-Demo 必须完成：参数防呆、周期模板、条件匹配、每周自动生成、截止锁定、跨午夜、模拟班次冲突、角色切换和多视图日历。
+Demo 必须完成：参数防呆、周期模板、条件匹配、经理点击生成未来 1 至 12 周时段、截止锁定、跨午夜、模拟班次冲突、角色切换和多视图日历。
 
 Demo 不实现：真实排班引擎对接、批量文件处理、消息发送、审批流程、场地校验、特殊日期差异化和生产级 RBAC。

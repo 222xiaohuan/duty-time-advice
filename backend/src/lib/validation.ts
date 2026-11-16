@@ -52,16 +52,9 @@ export function validateParamValues(input: Record<string, unknown>): void {
     : [DtaSubmitMode.MODE_ONLY_ROSTERABLE, DtaSubmitMode.MODE_ALL_STATUS, DtaSubmitMode.MODE_NO_SUBMIT];
   if (!allowed.includes(submitMode)) bad("baselineRule 与 submitMode 组合不合法");
   parseFlag(input.empEditEnable, "empEditEnable");
-  const autoEnabled = parseFlag(input.templateAutoGenEnable, "templateAutoGenEnable");
-  if (autoEnabled === 1) {
-    if (!Number.isInteger(input.autoGenRangeWeek) || (input.autoGenRangeWeek as number) < 1 || (input.autoGenRangeWeek as number) > 10) bad("autoGenRangeWeek 必须为 1 至 10 的整数");
-    if (!Number.isInteger(input.autoGenWeekday) || (input.autoGenWeekday as number) < 1 || (input.autoGenWeekday as number) > 7) bad("autoGenWeekday 必须为 1 至 7 的整数");
-    parseTime(input.autoGenTime, "autoGenTime");
-  } else if (input.autoGenRangeWeek !== null && input.autoGenRangeWeek !== undefined) {
-    if (!Number.isInteger(input.autoGenRangeWeek) || (input.autoGenRangeWeek as number) < 1 || (input.autoGenRangeWeek as number) > 10) bad("autoGenRangeWeek 必须为 1 至 10 的整数或 null");
-  }
-  if (input.autoGenWeekday !== null && input.autoGenWeekday !== undefined && (!Number.isInteger(input.autoGenWeekday) || (input.autoGenWeekday as number) < 1 || (input.autoGenWeekday as number) > 7)) bad("autoGenWeekday 必须为 1 至 7 的整数或 null");
-  if (input.autoGenTime !== null && input.autoGenTime !== undefined) parseTime(input.autoGenTime, "autoGenTime");
+  if (parseFlag(input.templateAutoGenEnable, "templateAutoGenEnable") !== 0) bad("Demo 不启用定时生成");
+  if (!Number.isInteger(input.autoGenRangeWeek) || (input.autoGenRangeWeek as number) < 1 || (input.autoGenRangeWeek as number) > 12) bad("autoGenRangeWeek 必须为 1 至 12 的整数");
+  if (input.autoGenWeekday !== null || input.autoGenTime !== null) bad("Demo 不配置定时生成星期和时间");
   const conflict = input.conflictCheckMode ?? DtaConflictCheckMode.STRONG_BLOCK;
   if (conflict !== DtaConflictCheckMode.STRONG_BLOCK) bad("Demo 仅支持 STRONG_BLOCK");
   for (const field of ["fieldSiteEnable", "enableApproval", "specialTagDiffEnable"]) {

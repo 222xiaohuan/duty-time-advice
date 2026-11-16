@@ -163,10 +163,10 @@ model DtaParamGroup {
   baselineRule          DtaBaselineRule      @map("baseline_rule")
   submitMode            DtaSubmitMode        @map("submit_mode")
   empEditEnable         Int                  @map("emp_edit_enable")
-  templateAutoGenEnable Int                  @map("template_auto_gen_enable")
-  autoGenRangeWeek      Int?                 @map("auto_gen_range_week") // 1 至 10
-  autoGenWeekday        Int?                 @map("auto_gen_weekday") // 1 至 7
-  autoGenTime           String?              @map("auto_gen_time") // "HH:mm"，香港时间
+  templateAutoGenEnable Int                  @map("template_auto_gen_enable") // Demo 固定 0；定时生成预留
+  autoGenRangeWeek      Int?                 @map("auto_gen_range_week") // Demo 必填 1 至 12，手动生成周数
+  autoGenWeekday        Int?                 @map("auto_gen_weekday") // Demo 固定 null；定时生成预留
+  autoGenTime           String?              @map("auto_gen_time") // Demo 固定 null；定时生成预留
   conflictCheckMode     DtaConflictCheckMode @default(STRONG_BLOCK) @map("conflict_check_mode")
   fieldSiteEnable       Int                  @default(0) @map("field_site_enable") // 预留，Demo 固定 0
   enableApproval        Int                  @default(0) @map("enable_approval") // 预留，Demo 固定 0
