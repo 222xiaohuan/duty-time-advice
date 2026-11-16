@@ -7,6 +7,7 @@ import { meRouter } from "./routes/me";
 import { dictionariesRouter } from "./routes/dictionaries";
 import { paramGroupsRouter } from "./routes/paramGroups";
 import { mockShiftsRouter } from "./routes/mockShifts";
+import { managerEmployeesRouter } from "./routes/managerEmployees";
 import { templatesRouter } from "./routes/templates";
 import { templateGenerationRouter } from "./routes/templateGeneration";
 import { rosterabilityRecordsRouter } from "./routes/rosterabilityRecords";
@@ -25,6 +26,7 @@ export function createApp(): Express {
   app.use("/api/dictionaries", dictionariesRouter);
   app.use("/api/param-groups", paramGroupsRouter);
   app.use("/api/mock-shifts", mockShiftsRouter);
+  app.use("/api/manager/employees", managerEmployeesRouter);
   app.use("/api/templates", templatesRouter);
   app.use("/api/template-generation", templateGenerationRouter);
   app.use("/api/rosterability-records", rosterabilityRecordsRouter);

@@ -178,6 +178,69 @@ button { cursor: pointer; }
 .batch-ok { color: #216a3f; }
 .batch-fail { color: #a52b35; }
 
+.manager-page { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.manager-toolbar, .manager-period, .manager-period-nav, .manager-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.manager-toolbar { flex-wrap: wrap; }
+.manager-tabs { display: flex; flex-wrap: wrap; gap: 3px; border-bottom: 1px solid var(--border); }
+.manager-tabs button { min-height: 39px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #556675; font-size: 13px; }
+.manager-tabs button.selected { border-bottom-color: #0c336a; color: #0c336a; font-weight: 700; }
+.manager-filters { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; padding: 13px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
+.manager-filters label { display: flex; flex-direction: column; min-width: 0; gap: 5px; color: #526171; font-size: 11px; font-weight: 600; }
+.manager-filters select { width: 100%; min-width: 0; height: 35px; padding: 0 8px; border: 1px solid #ccd7df; border-radius: 4px; background: #fff; color: #263a4a; font-size: 12px; }
+.manager-filters select:disabled { background: #edf1f4; color: #5d6c77; }
+.manager-period-nav { justify-content: flex-start; }
+.manager-period-nav strong { min-width: 165px; text-align: center; font-size: 14px; }
+.manager-view { min-width: 0; border-top: 1px solid var(--border); }
+.manager-day-list { display: flex; flex-direction: column; }
+.manager-day-row { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 14px; align-items: stretch; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.manager-person, .manager-week-person { display: flex; flex-direction: column; justify-content: center; gap: 4px; min-width: 0; font-size: 13px; }
+.manager-person span, .manager-week-person small { color: #788590; font-size: 11px; }
+.manager-cell { display: flex; flex-wrap: wrap; align-content: flex-start; align-items: flex-start; gap: 5px; min-width: 0; min-height: 60px; padding: 8px; border: 1px solid #e0e7eb; border-radius: 3px; background: #fff; text-align: left; }
+.manager-cell:hover { border-color: #7da8c4; }
+.manager-cell.selected { border-color: #0c6b8e; box-shadow: inset 0 0 0 1px #0c6b8e; }
+.manager-chip { display: inline-block; max-width: 100%; padding: 4px 6px; border-radius: 2px; overflow-wrap: anywhere; font-size: 11px; line-height: 1.35; }
+.manager-chip.rosterable { background: #e6f4eb; color: #1f6e40; }
+.manager-chip.unrosterable { background: #fceced; color: #a52e37; }
+.manager-chip.shift { background: #eaf1f7; color: #285476; }
+.manager-empty { color: #a5afb7; }
+.manager-week-scroll { max-width: 100%; overflow-x: auto; }
+.manager-week-grid { min-width: 850px; display: grid; grid-template-columns: 145px repeat(7, minmax(100px, 1fr)); }
+.manager-week-head { padding: 9px 7px; border-bottom: 1px solid var(--border); background: #edf2f5; color: #344b5d; font-size: 12px; font-weight: 700; }
+.manager-week-head small { display: block; color: #7d8992; font-size: 11px; font-weight: 400; }
+.manager-week-row { display: contents; }
+.manager-week-person { padding: 8px; border-bottom: 1px solid var(--border); }
+.manager-week-grid > .manager-week-head:first-child, .manager-week-person { position: sticky; left: 0; z-index: 1; background: #f4f7f9; }
+.manager-week-grid .manager-cell { min-height: 90px; border-radius: 0; border-top: 0; border-left: 0; }
+.manager-month { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.manager-month > strong { padding: 8px 5px; background: #edf2f5; text-align: center; color: #526171; font-size: 11px; }
+.manager-month button { display: flex; flex-direction: column; gap: 4px; min-width: 0; min-height: 83px; padding: 8px; border: 1px solid #e0e7eb; background: #fff; text-align: left; }
+.manager-month button.outside { background: #f7f8f9; color: #9aa5ad; }
+.manager-month button strong { font-size: 12px; }
+.manager-month button span, .manager-month button small { color: #526a79; font-size: 10px; }
+.manager-no-data { padding: 24px 0; color: #788590; font-size: 13px; }
+.manager-detail { display: flex; flex-direction: column; gap: 14px; padding-top: 18px; border-top: 2px solid #0c336a; scroll-margin-top: 20px; }
+.manager-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+.manager-editor { min-width: 0; padding: 16px; border: 1px solid var(--border); border-radius: 4px; background: #fff; }
+.manager-editor-head h3 { margin: 0; font-size: 14px; }
+.manager-entry-list { margin: 14px 0; border-top: 1px solid var(--border); }
+.manager-entry-list > div { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; min-height: 43px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+.manager-entry-list small { flex: 1; min-width: 110px; color: #788590; overflow-wrap: anywhere; }
+.manager-entry-list p { color: #87929d; font-size: 12px; }
+.manager-entry-list button { padding: 4px; border: 0; background: transparent; color: #0c547e; font-size: 11px; }
+.manager-entry-list button:disabled { color: #adb6be; cursor: not-allowed; }
+.manager-form { display: flex; flex-direction: column; align-items: flex-start; gap: 13px; padding-top: 4px; }
+.manager-form .admin-form-grid { width: 100%; }
+.manager-generation { display: flex; flex-direction: column; gap: 12px; padding: 15px; border: 1px solid var(--border); border-radius: 4px; background: #fff; }
+.manager-summary { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.manager-summary > div { display: flex; flex-direction: column; gap: 3px; padding: 8px; background: #f1f5f7; }
+.manager-summary strong { font-size: 18px; }
+.manager-summary span { color: #65717d; font-size: 11px; }
+.manager-generation summary { cursor: pointer; color: #0c547e; font-size: 12px; }
+.manager-skip-list { max-height: 220px; overflow-y: auto; margin-top: 8px; border-top: 1px solid var(--border); }
+.manager-skip-list > div { display: flex; gap: 10px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 11px; }
+.manager-skip-list strong { flex: none; }
+.manager-skip-list span { overflow-wrap: anywhere; }
+
 .fc { --fc-border-color: #e1e6ea; --fc-button-bg-color: #fff; --fc-button-border-color: #d6dee5; --fc-button-text-color: #2d4355; --fc-button-hover-bg-color: #eef2f5; --fc-button-hover-border-color: #c3ced7; --fc-button-active-bg-color: #e9f0f6; --fc-button-active-border-color: #aebfce; --fc-today-bg-color: #edf5f4; font-size: 12px; }
 .fc .fc-toolbar { gap: 10px; margin-bottom: 14px; }
 .fc .fc-toolbar-title { color: #263a4a; font-size: 15px; font-weight: 700; }
@@ -197,6 +260,8 @@ button { cursor: pointer; }
   .employee-week { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   .employee-day { min-height: 135px; }
   .employee-day-entries { min-height: 80px; }
+  .manager-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .manager-summary { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
 @media (max-width: 720px) {
@@ -228,6 +293,10 @@ button { cursor: pointer; }
   .employee-day-entries { min-height: 65px; }
   .employee-lower { grid-template-columns: minmax(0, 1fr); }
   .employee-toolbar { align-items: flex-start; }
+  .manager-day-row { grid-template-columns: minmax(0, 1fr); gap: 5px; }
+  .manager-detail-grid { grid-template-columns: minmax(0, 1fr); }
+  .manager-month button { min-height: 70px; padding: 4px; }
+  .manager-month button span, .manager-month button small { overflow-wrap: anywhere; }
 }
 
 @media (max-width: 480px) {
@@ -250,4 +319,10 @@ button { cursor: pointer; }
   .employee-batch-toolbar button { flex: 1 1 145px; }
   .employee-editor { padding: 15px; }
   .week-nav strong { min-width: 120px; }
+  .manager-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .manager-period-nav { flex-wrap: wrap; }
+  .manager-period-nav strong { min-width: 145px; }
+  .manager-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .manager-month button { min-height: 59px; }
+  .manager-month button span, .manager-month button small { display: block; font-size: 9px; line-height: 1.15; }
 }

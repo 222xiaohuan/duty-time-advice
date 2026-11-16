@@ -6,6 +6,7 @@ import { AlertCircle, CalendarDays, Check, CircleHelp, RefreshCw, Settings2, Shi
 import { Parameters } from "@/components/admin/Parameters";
 import { Templates } from "@/components/admin/Templates";
 import { EmployeeWeek } from "@/components/employee/EmployeeWeek";
+import { ManagerRoster } from "@/components/manager/ManagerRoster";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ApiError, apiGet, type Health, type MockIdentity, type SourceDictionaryItem, type StatusDictionaryItem } from "@/lib/api";
@@ -109,7 +110,7 @@ function App() {
 
         {state.message && <div className="error-banner" role="alert"><AlertCircle size={18} /><span>{state.message}</span><Button size="sm" variant="outline" onClick={() => setRefreshKey((value) => value + 1)}>重试</Button></div>}
 
-        {profile.role === "employee" ? <EmployeeWeek key={profile.key} profile={profile} sources={state.sources} /> : profile.role === "admin" && view !== "workspace" ? <>
+        {profile.role === "employee" ? <EmployeeWeek key={profile.key} profile={profile} sources={state.sources} /> : profile.role === "manager" ? <ManagerRoster key={profile.key} profile={profile} statuses={state.statuses} sources={state.sources} /> : profile.role === "admin" && view !== "workspace" ? <>
           {view === "parameters" ? <Parameters profile={profile} /> : <Templates profile={profile} />}
         </> : <><div className="summary-strip" aria-label="当前概览">
           <div className="summary-item"><span className="summary-label">当前身份</span><strong>{profile.label}</strong><span className="summary-meta">{roleNames[profile.role]} · ID {state.identity?.userId ?? profile.userId}</span></div>
