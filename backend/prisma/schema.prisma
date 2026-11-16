@@ -270,7 +270,7 @@ model DtaRosterabilityRecord {
   updatedBy      Int                    @map("updated_by")
 
   @@index([tenantId, empId, businessDate, isDeleted])
-  @@index([tenantId, empId, businessDate, templateItemId])
+  @@unique([tenantId, empId, businessDate, templateItemId])
   @@map("dta_rosterability_record")
 }
 

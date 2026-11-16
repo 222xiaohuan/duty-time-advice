@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { AppError, ErrorCode } from "../lib/response";
-import { MOCK_ROLES, type MockRole } from "../types/enums";
+import { MANAGER_USER_IDS, MOCK_ROLES, type MockRole } from "../types/enums";
 
 export interface MockIdentity {
   role: MockRole;
@@ -39,6 +39,10 @@ export function mockIdentity(req: Request, _res: Response, next: NextFunction): 
     orgId = parsePositiveInt(req.header("x-mock-org-id"));
     if (orgId === null) {
       return next(new AppError(ErrorCode.UNAUTHORIZED, "manager 角色必须提供 x-mock-org-id", 401));
+    }
+    const expectedUserId = orgId === 1 ? MANAGER_USER_IDS.org1 : orgId === 2 ? MANAGER_USER_IDS.org2 : null;
+    if (userId !== expectedUserId) {
+      return next(new AppError(ErrorCode.FORBIDDEN, "经理账号与管辖组织不匹配", 403));
     }
   }
   req.identity = { role: role as MockRole, userId, orgId };

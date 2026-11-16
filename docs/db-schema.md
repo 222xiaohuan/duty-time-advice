@@ -256,7 +256,7 @@ Demo 不增加班组、职级或自定义字段。
 | created_at / updated_at | datetime | 创建与更新时间 |
 | created_by / updated_by | int | 创建与更新人 |
 
-建议索引：`tenant_id + emp_id + business_date + is_deleted`；`tenant_id + emp_id + business_date + template_item_id`（模板生成去重）。
+索引：`tenant_id + emp_id + business_date + is_deleted`；唯一约束 `tenant_id + emp_id + business_date + template_item_id`（模板生成去重，普通记录的 `template_item_id` 可为空）。
 
 模板去重由服务层按 `tenant_id + emp_id + business_date + template_item_id` 校验，且不区分 `is_deleted`：已存在（含已软删除、已人工修改）的记录不再重新生成。
 
