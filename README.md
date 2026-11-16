@@ -49,6 +49,10 @@ Demo 不实现：
 
 Demo 使用 SQLite，数据文件为 `backend/prisma/dev.db`，不入版本库。`backend/.env.example` 为配置样例；重建数据可执行迁移和种子脚本，不影响任何外部系统。
 
+## 本地运行
+
+后端在 `backend/` 执行 `npm install`、`npm run dev`，默认监听 `http://localhost:3001`。前端在 `frontend/` 执行 `npm install`、`npm run dev`，打开 `http://localhost:5173`；Vite 将 `/api` 代理到后端。前端可通过 `VITE_API_BASE_URL` 指定其他后端地址。当前前端仅包含 T007 应用框架、角色切换和通用日历容器，业务页面在 T008–T010 实现。
+
 ## 继续开发指令
 
 > 读取 `docs/AGENTS.md` 和 `docs/TASKS.md`，复述当前 `🟢 Current` 任务与验收标准，等待确认后继续；不得跳任务或擅自扩大 Demo 范围。
