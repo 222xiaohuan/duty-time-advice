@@ -291,13 +291,13 @@ Demo 不增加班组、职级或自定义字段。
 | target_type | text(50) | `record` / `param` / `template` / `condition` / `mock_shift` |
 | target_id | int | 操作对象 ID |
 | action_code | enum | `DtaAuditActionCode` |
-| status_code | enum | `DtaRosterabilityStatus`，仅 `target_type=record` 时填写，可为 null，用于筛选 |
-| source_code | enum | `DtaSourceCode`，仅 `target_type=record` 时填写，可为 null，用于筛选 |
+| status_code | enum | `DtaRosterabilityStatus`，仅 `target_type=record` 时填写；新增、修改取变更后值，删除取变更前值；其他对象为 null，用于筛选 |
+| source_code | enum | `DtaSourceCode`，仅 `target_type=record` 时填写；新增、修改取变更后值，删除取变更前值；其他对象为 null，用于筛选 |
 | before_json | text | 变更前 JSON，可为 null |
 | after_json | text | 变更后 JSON，可为 null |
 | operator_id | int | 操作人 ID；系统任务使用固定系统账号 ID |
 | operate_time | datetime | 操作时间 |
-| operate_source | text(50) | `employee` / `manager` / `admin` / `system` |
+| operate_source | text(50) | 操作者角色或系统：`employee` / `manager` / `admin` / `system`；不表示操作入口 |
 | remark | text(500) | 备注，可为 null |
 | site_code | text(50) | 场地预留，可为 null |
 | approval_related | int | 审批预留，默认 0 |
@@ -306,6 +306,8 @@ Demo 不增加班组、职级或自定义字段。
 审计日志不提供修改、软删除或物理删除接口。建议索引：`tenant_id + operate_time`、`tenant_id + org_id + emp_id`。
 
 `before_json` / `after_json` 使用 `text` 保存 JSON 字符串；序列化时日期统一输出 ISO 字符串。
+
+成功生成的记录以 `target_type=record`、`action_code=TEMPLATE_GEN` 记载；已匹配模板但因锁定或班次冲突跳过时，标准产品可用 `target_type=template`、模板 ID、员工、业务日期及 `remark` 记载原因，`status_code` 和 `source_code` 留空。独立的操作入口字段尚未预留，正式产品落地时另行扩展结构。Demo 不读写本表。
 
 ## 15. 本期不建表的能力
 
