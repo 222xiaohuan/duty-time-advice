@@ -9,6 +9,7 @@ import { paramGroupsRouter } from "./routes/paramGroups";
 import { mockShiftsRouter } from "./routes/mockShifts";
 import { templatesRouter } from "./routes/templates";
 import { templateGenerationRouter } from "./routes/templateGeneration";
+import { rosterabilityRecordsRouter } from "./routes/rosterabilityRecords";
 
 export function createApp(): Express {
   const app = express();
@@ -26,6 +27,7 @@ export function createApp(): Express {
   app.use("/api/mock-shifts", mockShiftsRouter);
   app.use("/api/templates", templatesRouter);
   app.use("/api/template-generation", templateGenerationRouter);
+  app.use("/api/rosterability-records", rosterabilityRecordsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

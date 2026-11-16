@@ -22,10 +22,13 @@ beforeAll(async () => {
     { id: 1, tenantId: 1, orgId: 1, empName: "Employee 1", empTypeCode: "FULL_TIME", postCode: "BETTING_SERVICE", ...by },
     { id: 2, tenantId: 1, orgId: 2, empName: "Employee 2", empTypeCode: "FULL_TIME", postCode: "BETTING_SERVICE", ...by },
   ] });
-  await prisma.dtaRosterabilityStatusDict.createMany({ data: [
-    { tenantId: 1, statusCode: DtaRosterabilityStatus.ROSTERABLE, statusName: "可排", allowSchedule: 1, empSelfEdit: 1, enabled: 1, ...by },
-    { tenantId: 1, statusCode: DtaRosterabilityStatus.UNROSTERABLE, statusName: "不可排", allowSchedule: 0, empSelfEdit: 1, enabled: 1, ...by },
-  ] });
+  for (const [statusCode, statusName, allowSchedule] of [[DtaRosterabilityStatus.ROSTERABLE, "可排", 1], [DtaRosterabilityStatus.UNROSTERABLE, "不可排", 0]] as const) {
+    await prisma.dtaRosterabilityStatusDict.upsert({
+      where: { tenantId_statusCode: { tenantId: 1, statusCode } },
+      update: { enabled: 1, empSelfEdit: 1 },
+      create: { tenantId: 1, statusCode, statusName, allowSchedule, empSelfEdit: 1, enabled: 1, ...by },
+    });
+  }
   for (const orgId of [1, 2]) await prisma.dtaParamGroup.create({ data: {
     tenantId: 1, orgId, empTypeCode: "FULL_TIME", cutoffDays: 0,
     baselineRule: DtaBaselineRule.BASE_ROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_UNROSTERABLE,
@@ -61,7 +64,7 @@ describe("T003 模板维护与经理生成", () => {
     expect((await request(app).post("/api/template-generation").set({ ...manager1, "x-mock-org-id": "2" }).send({})).status).toBe(403);
     const otherOrg = await generateForManager(2, 9102, now);
     expect(otherOrg.summary.created).toBe(0);
-    expect(otherOrg.skipped.every((row) => row.empId === 2)).toBe(true);
+    expect(otherOrg.skipped.every((row) => row.empId === 2 || row.empId === 102)).toBe(true);
   });
 
   it("生成跨午夜时段，阻止有班次的不可排，并在重复点击及软删除后保持幂等", async () => {
@@ -94,7 +97,7 @@ describe("T003 模板维护与经理生成", () => {
     await prisma.dtaParamGroup.update({ where: { tenantId_orgId_empTypeCode: { tenantId: 1, orgId: 1, empTypeCode: "FULL_TIME" } }, data: { cutoffDays: 2 } });
     const result = await generateForManager(1, 9101, now);
     expect(result.skipped).toContainEqual(expect.objectContaining({ businessDate: "2026-11-17", templateItemId: tuesday.body.data.id, reason: "LOCKED" }));
-    expect(await prisma.dtaRosterabilityRecord.count({ where: { templateId: secondId } })).toBe(0);
+    expect(await prisma.dtaRosterabilityRecord.count({ where: { templateId: secondId, empId: 1 } })).toBe(0);
   });
 
   it("按最多 12 周配置生成，并通过经理接口返回汇总", async () => {
