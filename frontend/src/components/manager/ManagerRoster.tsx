@@ -1,6 +1,7 @@
 import { useEffect, useState, type Dispatch, type FormEvent, type SetStateAction } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight, Plus, RefreshCw, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ManagerDayTimeline } from "@/components/manager/ManagerDayTimeline";
 import { apiDelete, apiGet, apiPatch, apiPost, type SourceDictionaryItem, type StatusDictionaryItem } from "@/lib/api";
 import { employeeTypes, errorText, labelOf, posts, weekdays } from "@/lib/admin";
 import type { MockProfile } from "@/lib/identity";
@@ -55,6 +56,7 @@ export function ManagerRoster({ profile, statuses, sources, onOpenSchedule }: { 
   const [records, setRecords] = useState<RecordRow[]>([]);
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
   const [recordForm, setRecordForm] = useState<RecordForm>(newRecord);
+  const [dayStatusCode, setDayStatusCode] = useState("ROSTERABLE");
   const [editingRecord, setEditingRecord] = useState<number | null>(null);
   const [generation, setGeneration] = useState<GenerateResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -80,13 +82,13 @@ export function ManagerRoster({ profile, statuses, sources, onOpenSchedule }: { 
     let active = true;
     setLoading(true);
     Promise.all([
-      apiGet<RecordRow[]>(`/rosterability-records?orgId=${directory.orgId}&from=${range.from}&to=${range.to}`, profile),
+      apiGet<RecordRow[]>(`/rosterability-records?orgId=${directory.orgId}&from=${mode === "day" ? addDays(range.from, -1) : range.from}&to=${range.to}`, profile),
       apiGet<ShiftRow[]>(`/mock-shifts?orgId=${directory.orgId}`, profile),
     ]).then(([nextRecords, nextShifts]) => {
       if (active) { setRecords(nextRecords); setShifts(nextShifts); setLoading(false); }
     }).catch((cause: unknown) => { if (active) { setError(errorText(cause)); setLoading(false); } });
     return () => { active = false; };
-  }, [directory, profile, range.from, range.to, refresh]);
+  }, [directory, profile, range.from, range.to, mode, refresh]);
 
   useEffect(() => {
     if (!directory) return;
@@ -189,9 +191,9 @@ export function ManagerRoster({ profile, statuses, sources, onOpenSchedule }: { 
     {error && <p className="form-error" role="alert">{error}</p>}{notice && <p className="form-success" role="status">{notice}</p>}
     {generation && <section className="manager-generation" aria-label="生成结果"><div className="admin-intro"><h2>生成结果</h2><span>从 {generation.startMonday} 开始 · {generation.employeeCount} 名员工</span></div><div className="manager-summary">{Object.entries(generation.summary).map(([key, count]) => <div key={key}><strong>{count}</strong><span>{key === "created" ? "新增" : skipLabels[key === "shiftConflict" ? "SHIFT_CONFLICT" : key === "noParam" ? "NO_PARAM" : key === "noTemplate" ? "NO_TEMPLATE" : key === "statusDisabled" ? "STATUS_DISABLED" : key.toUpperCase()]}</span></div>)}</div>{generation.skipped.length > 0 && <details><summary>逐项跳过原因（{generation.skipped.length}）</summary><div className="manager-skip-list">{generation.skipped.map((row, index) => <div key={`${row.empId}-${row.businessDate}-${index}`}><strong>{directory?.employees.find((employee) => employee.id === row.empId)?.empName ?? `员工 ${row.empId}`}</strong><span>{row.businessDate ?? "—"} · {skipLabels[row.reason] ?? row.reason} · {row.message}</span></div>)}</div></details>}</section>}
     <section className="manager-view" aria-label="经理日历">
-      {loading ? <div className="employee-loading">正在加载可排性记录和班次</div> : employees.length === 0 ? <p className="manager-no-data">当前筛选下没有员工</p> : mode === "day" ? <div className="manager-day-list">{employees.map((employee) => <div className="manager-day-row" key={employee.id}><div className="manager-person"><strong>{employee.empName}</strong><span>{labelOf(employeeTypes, employee.empTypeCode)} · {labelOf(posts, employee.postCode)}</span></div>{cell(employee.id, anchor)}</div>)}</div> : mode === "month" ? <div className="manager-month">{weekdays.map((name) => <strong key={name}>{name}</strong>)}{monthDays.map(monthCell)}</div> : <div className="manager-week-scroll"><div className="manager-week-grid"><div className="manager-week-head">员工</div>{weekDays.map((day, index) => <div className="manager-week-head" key={day}>{weekdays[index]}<small>{shortDay(day)}</small></div>)}{(mode === "person" ? singleEmployee ? [singleEmployee] : [] : employees).map((employee) => <div className="manager-week-row" key={employee.id}><div className="manager-week-person"><strong>{employee.empName}</strong><small>{labelOf(employeeTypes, employee.empTypeCode)} · {labelOf(posts, employee.postCode)}</small></div>{weekDays.map((day) => cell(employee.id, day))}</div>)}</div></div>}
+      {loading ? <div className="employee-loading">正在加载可排性记录和班次</div> : employees.length === 0 ? <p className="manager-no-data">当前筛选下没有员工</p> : mode === "day" ? <ManagerDayTimeline key={anchor} day={anchor} employees={employees} records={shownRecords} shifts={shownShifts} statuses={statuses} sources={sources} profile={profile} chosenStatus={dayStatusCode} onStatusChange={setDayStatusCode} onChanged={(message) => { setNotice(message); setRefresh((value) => value + 1); }} /> : mode === "month" ? <div className="manager-month">{weekdays.map((name) => <strong key={name}>{name}</strong>)}{monthDays.map(monthCell)}</div> : <div className="manager-week-scroll"><div className="manager-week-grid"><div className="manager-week-head">员工</div>{weekDays.map((day, index) => <div className="manager-week-head" key={day}>{weekdays[index]}<small>{shortDay(day)}</small></div>)}{(mode === "person" ? singleEmployee ? [singleEmployee] : [] : employees).map((employee) => <div className="manager-week-row" key={employee.id}><div className="manager-week-person"><strong>{employee.empName}</strong><small>{labelOf(employeeTypes, employee.empTypeCode)} · {labelOf(posts, employee.postCode)}</small></div>{weekDays.map((day) => cell(employee.id, day))}</div>)}</div></div>}
     </section>
-    <section id="manager-detail" className="manager-detail"><div className="admin-intro"><h2>{selectedEmployee ? `${selectedEmployee.empName} · ${selection?.day}` : "员工详情"}</h2><span>{locked ? "可排性记录只读" : "可维护可排性记录"}</span></div>{selection && selectedEmployee && <div className="manager-detail-grid">
+    {mode !== "day" && <section id="manager-detail" className="manager-detail"><div className="admin-intro"><h2>{selectedEmployee ? `${selectedEmployee.empName} · ${selection?.day}` : "员工详情"}</h2><span>{locked ? "可排性记录只读" : "可维护可排性记录"}</span></div>{selection && selectedEmployee && <div className="manager-detail-grid">
       <div className="manager-editor">
         <div className="manager-editor-head"><h3>可排性记录</h3><Button type="button" variant="outline" size="sm" onClick={() => { setEditingRecord(null); setRecordForm(newRecord()); }}><Plus size={14} />新增</Button></div>
         <div className="manager-entry-list">{selectedRecords.map((row) => <div key={row.id}>
@@ -207,6 +209,6 @@ export function ManagerRoster({ profile, statuses, sources, onOpenSchedule }: { 
           <span className="manager-chip shift">{row.shiftName} {hkTime(row.startTime)}–{hkTime(row.endTime)}{hkDate(row.endTime) !== row.businessDate ? " 次日" : ""}</span><small>{row.durationMinutes} 分钟</small>
         </div>)}{selectedShifts.length === 0 && <p>当日暂无模拟班次</p>}</div>
       </div>
-    </div>}</section>
+    </div>}</section>}
   </div>;
 }
