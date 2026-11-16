@@ -13,10 +13,8 @@ type RecordRow = { id: number; empId: number; businessDate: string; statusCode: 
 type ShiftRow = { id: number; empId: number; businessDate: string; shiftName: string; startTime: string; endTime: string; durationMinutes: number };
 type Selection = { empId: number; day: string };
 type RecordForm = { statusCode: string; startTime: string; endTime: string; endDayOffset: number; remark: string };
-type ShiftForm = { shiftName: string; startTime: string; endTime: string; endDayOffset: number };
 type GenerateResult = { startMonday: string; employeeCount: number; summary: { created: number; exists: number; locked: number; shiftConflict: number; noParam: number; noTemplate: number; statusDisabled: number }; skipped: { empId: number; businessDate: string | null; reason: string; message: string }[] };
 const newRecord = (): RecordForm => ({ statusCode: "ROSTERABLE", startTime: "09:00", endTime: "17:00", endDayOffset: 0, remark: "" });
-const newShift = (): ShiftForm => ({ shiftName: "工作班", startTime: "09:00", endTime: "17:00", endDayOffset: 0 });
 const modes: { value: Mode; label: string }[] = [{ value: "day", label: "单日全员" }, { value: "person", label: "单人周" }, { value: "week", label: "组织周" }, { value: "month", label: "组织月" }];
 const skipLabels: Record<string, string> = { EXISTS: "已存在", LOCKED: "已锁定", SHIFT_CONFLICT: "班次冲突", NO_PARAM: "无参数", NO_TEMPLATE: "无模板", STATUS_DISABLED: "状态未启用" };
 
@@ -44,16 +42,7 @@ function RecordFields({ form, setForm, statuses }: { form: RecordForm; setForm: 
   </div>;
 }
 
-function ShiftFields({ form, setForm }: { form: ShiftForm; setForm: Dispatch<SetStateAction<ShiftForm>> }) {
-  return <div className="admin-form-grid">
-    <label className="employee-remark">班次名称<input name="shiftName" required maxLength={100} value={form.shiftName} onChange={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, shiftName: value })); }} /></label>
-    <label>开始时间<input name="startTime" type="time" required value={form.startTime} onInput={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, startTime: value })); }} onChange={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, startTime: value })); }} /></label>
-    <label>结束时间<input name="endTime" type="time" required value={form.endTime} onInput={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, endTime: value })); }} onChange={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, endTime: value })); }} /></label>
-    <label>结束日期<select name="endDayOffset" value={form.endDayOffset} onChange={(event) => { const value = Number(event.currentTarget.value); setForm((current) => ({ ...current, endDayOffset: value })); }}><option value={0}>当天</option><option value={1}>次日（跨午夜）</option></select></label>
-  </div>;
-}
-
-export function ManagerRoster({ profile, statuses, sources }: { profile: MockProfile; statuses: StatusDictionaryItem[]; sources: SourceDictionaryItem[] }) {
+export function ManagerRoster({ profile, statuses, sources, onOpenSchedule }: { profile: MockProfile; statuses: StatusDictionaryItem[]; sources: SourceDictionaryItem[]; onOpenSchedule: () => void }) {
   const [directory, setDirectory] = useState<Directory | null>(null);
   const [mode, setMode] = useState<Mode>("day");
   const [anchor, setAnchor] = useState(hkToday);
@@ -66,9 +55,7 @@ export function ManagerRoster({ profile, statuses, sources }: { profile: MockPro
   const [records, setRecords] = useState<RecordRow[]>([]);
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
   const [recordForm, setRecordForm] = useState<RecordForm>(newRecord);
-  const [shiftForm, setShiftForm] = useState<ShiftForm>(newShift);
   const [editingRecord, setEditingRecord] = useState<number | null>(null);
-  const [editingShift, setEditingShift] = useState<number | null>(null);
   const [generation, setGeneration] = useState<GenerateResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -107,7 +94,7 @@ export function ManagerRoster({ profile, statuses, sources }: { profile: MockPro
       (!employeeFilter || String(employee.id) === employeeFilter) && (!typeFilter || employee.empTypeCode === typeFilter) && (!postFilter || employee.postCode === postFilter));
     if (selection && matching.some((employee) => employee.id === selection.empId)) return;
     setSelection(matching[0] ? { empId: matching[0].id, day: anchor } : null);
-    setEditingRecord(null); setEditingShift(null); setRecordForm(newRecord()); setShiftForm(newShift());
+    setEditingRecord(null); setRecordForm(newRecord());
   }, [directory, employeeFilter, typeFilter, postFilter, selection?.empId]);
 
   const employees = (directory?.employees ?? []).filter((employee) =>
@@ -125,14 +112,14 @@ export function ManagerRoster({ profile, statuses, sources }: { profile: MockPro
   const periodTitle = mode === "month" ? `${anchor.slice(0, 4)}年${Number(anchor.slice(5, 7))}月` : mode === "day" ? anchor : `${range.from} — ${range.to}`;
 
   function select(empId: number, day: string) {
-    setSelection({ empId, day }); setEditingRecord(null); setEditingShift(null); setRecordForm(newRecord()); setShiftForm(newShift());
+    setSelection({ empId, day }); setEditingRecord(null); setRecordForm(newRecord());
     window.requestAnimationFrame(() => document.getElementById("manager-detail")?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
   }
   function navigate(direction: number) {
     const next = mode === "month" ? moveMonth(anchor, direction) : addDays(anchor, direction * (mode === "day" ? 1 : 7));
     setAnchor(next);
     setSelection((current) => current ? { ...current, day: next } : current);
-    setEditingRecord(null); setEditingShift(null); setRecordForm(newRecord()); setShiftForm(newShift());
+    setEditingRecord(null); setRecordForm(newRecord());
   }
   async function run(action: () => Promise<unknown>, success: string): Promise<boolean> {
     setBusy(true); setError(""); setNotice("");
@@ -145,11 +132,6 @@ export function ManagerRoster({ profile, statuses, sources }: { profile: MockPro
     setEditingRecord(row.id);
     setRecordForm({ statusCode: row.statusCode, startTime: hkTime(row.startTime), endTime: hkTime(row.endTime), endDayOffset: hkDate(row.endTime) === row.businessDate ? 0 : 1, remark: row.remark ?? "" });
   }
-  function editShift(row: ShiftRow) {
-    select(row.empId, row.businessDate);
-    setEditingShift(row.id);
-    setShiftForm({ shiftName: row.shiftName, startTime: hkTime(row.startTime), endTime: hkTime(row.endTime), endDayOffset: hkDate(row.endTime) === row.businessDate ? 0 : 1 });
-  }
   function saveRecord(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!selection || locked) return;
@@ -157,20 +139,13 @@ export function ManagerRoster({ profile, statuses, sources }: { profile: MockPro
     const body = { empId: selection.empId, businessDate: selection.day, statusCode: String(values.get("statusCode")), startTime: String(values.get("startTime")), endTime: String(values.get("endTime")), endDayOffset: Number(values.get("endDayOffset")), remark: String(values.get("remark") || "") || null };
     void run(() => editingRecord === null ? apiPost("/rosterability-records", profile, body) : apiPatch(`/rosterability-records/${editingRecord}`, profile, body), "可排性记录已保存").then((saved) => { if (saved) { setEditingRecord(null); setRecordForm(newRecord()); } });
   }
-  function saveShift(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!selection) return;
-    const values = new FormData(event.currentTarget);
-    const body = { empId: selection.empId, businessDate: selection.day, shiftName: String(values.get("shiftName")), startTime: String(values.get("startTime")), endTime: String(values.get("endTime")), endDayOffset: Number(values.get("endDayOffset")) };
-    void run(() => editingShift === null ? apiPost("/mock-shifts", profile, body) : apiPatch(`/mock-shifts/${editingShift}`, profile, body), "模拟班次已保存").then((saved) => { if (saved) { setEditingShift(null); setShiftForm(newShift()); } });
-  }
   async function generate() {
     setBusy(true); setError(""); setNotice("");
     try {
       const result = await apiPost<GenerateResult>("/template-generation", profile, {});
       setGeneration(result); setMode("week"); setAnchor(result.startMonday);
       setSelection((current) => current ? { ...current, day: result.startMonday } : current);
-      setEditingRecord(null); setEditingShift(null); setRecordForm(newRecord()); setShiftForm(newShift());
+      setEditingRecord(null); setRecordForm(newRecord());
       setRefresh((value) => value + 1);
     } catch (cause) { setError(errorText(cause)); }
     finally { setBusy(false); }
@@ -210,7 +185,7 @@ export function ManagerRoster({ profile, statuses, sources }: { profile: MockPro
       <label>状态<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">全部状态</option>{statusOptions.map((status) => <option value={status.statusCode} key={status.statusCode}>{status.statusName}</option>)}</select></label>
       <label>来源<select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)}><option value="">全部来源</option>{sources.filter((source) => source.enabled).map((source) => <option value={source.sourceCode} key={source.sourceCode}>{source.sourceName}</option>)}</select></label>
     </div>
-    <div className="manager-period"><div className="manager-period-nav"><Button type="button" variant="outline" size="icon" title="上一期" aria-label="上一期" onClick={() => navigate(-1)}><ChevronLeft size={16} /></Button><strong>{periodTitle}</strong><Button type="button" variant="outline" size="icon" title="下一期" aria-label="下一期" onClick={() => navigate(1)}><ChevronRight size={16} /></Button><Button type="button" variant="outline" onClick={() => { const today = hkToday(); setAnchor(today); setSelection((current) => current ? { ...current, day: today } : current); setEditingRecord(null); setEditingShift(null); }}>今天</Button></div><Button type="button" variant="outline" size="icon" title="刷新" aria-label="刷新" onClick={() => setRefresh((value) => value + 1)}><RefreshCw size={16} /></Button></div>
+    <div className="manager-period"><div className="manager-period-nav"><Button type="button" variant="outline" size="icon" title="上一期" aria-label="上一期" onClick={() => navigate(-1)}><ChevronLeft size={16} /></Button><strong>{periodTitle}</strong><Button type="button" variant="outline" size="icon" title="下一期" aria-label="下一期" onClick={() => navigate(1)}><ChevronRight size={16} /></Button><Button type="button" variant="outline" onClick={() => { const today = hkToday(); setAnchor(today); setSelection((current) => current ? { ...current, day: today } : current); setEditingRecord(null); }}>今天</Button></div><Button type="button" variant="outline" size="icon" title="刷新" aria-label="刷新" onClick={() => setRefresh((value) => value + 1)}><RefreshCw size={16} /></Button></div>
     {error && <p className="form-error" role="alert">{error}</p>}{notice && <p className="form-success" role="status">{notice}</p>}
     {generation && <section className="manager-generation" aria-label="生成结果"><div className="admin-intro"><h2>生成结果</h2><span>从 {generation.startMonday} 开始 · {generation.employeeCount} 名员工</span></div><div className="manager-summary">{Object.entries(generation.summary).map(([key, count]) => <div key={key}><strong>{count}</strong><span>{key === "created" ? "新增" : skipLabels[key === "shiftConflict" ? "SHIFT_CONFLICT" : key === "noParam" ? "NO_PARAM" : key === "noTemplate" ? "NO_TEMPLATE" : key === "statusDisabled" ? "STATUS_DISABLED" : key.toUpperCase()]}</span></div>)}</div>{generation.skipped.length > 0 && <details><summary>逐项跳过原因（{generation.skipped.length}）</summary><div className="manager-skip-list">{generation.skipped.map((row, index) => <div key={`${row.empId}-${row.businessDate}-${index}`}><strong>{directory?.employees.find((employee) => employee.id === row.empId)?.empName ?? `员工 ${row.empId}`}</strong><span>{row.businessDate ?? "—"} · {skipLabels[row.reason] ?? row.reason} · {row.message}</span></div>)}</div></details>}</section>}
     <section className="manager-view" aria-label="经理日历">
@@ -227,12 +202,10 @@ export function ManagerRoster({ profile, statuses, sources }: { profile: MockPro
         {locked ? <p className="employee-readonly">该业务日期已到报备截止时间，记录只读；或员工尚无有效截止参数。</p> : <form onSubmit={saveRecord} className="manager-form"><RecordFields form={recordForm} setForm={setRecordForm} statuses={statusOptions} /><Button type="submit" disabled={busy || !statusOptions.length}><Save size={15} />{editingRecord ? "保存修改" : "新增记录"}</Button></form>}
       </div>
       <div className="manager-editor">
-        <div className="manager-editor-head"><h3>模拟班次</h3><Button type="button" variant="outline" size="sm" onClick={() => { setEditingShift(null); setShiftForm(newShift()); }}><Plus size={14} />新增</Button></div>
+        <div className="manager-editor-head"><h3>模拟班次</h3><Button type="button" variant="outline" size="sm" onClick={onOpenSchedule}><CalendarDays size={14} />模拟排班</Button></div>
         <div className="manager-entry-list">{selectedShifts.map((row) => <div key={row.id}>
           <span className="manager-chip shift">{row.shiftName} {hkTime(row.startTime)}–{hkTime(row.endTime)}{hkDate(row.endTime) !== row.businessDate ? " 次日" : ""}</span><small>{row.durationMinutes} 分钟</small>
-          <div><button type="button" onClick={() => editShift(row)}>编辑</button><button type="button" onClick={() => { if (window.confirm("删除这个模拟班次？")) void run(() => apiDelete(`/mock-shifts/${row.id}`, profile), "模拟班次已删除"); }}>删除</button></div>
         </div>)}{selectedShifts.length === 0 && <p>当日暂无模拟班次</p>}</div>
-        <form onSubmit={saveShift} className="manager-form"><ShiftFields form={shiftForm} setForm={setShiftForm} /><Button type="submit" disabled={busy}><Save size={15} />{editingShift ? "保存修改" : "新增班次"}</Button></form>
       </div>
     </div>}</section>
   </div>;
