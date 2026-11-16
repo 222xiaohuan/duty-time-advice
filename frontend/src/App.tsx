@@ -82,13 +82,13 @@ function App() {
 
     <div className="workspace">
       <aside className="sidebar" aria-label="主导航">
-        <div className="sidebar-section-label">出勤管理</div>
+        <div className="sidebar-section-label">排班管理</div>
         <div className="sidebar-active"><CalendarDays size={17} /><span>排班时间报备</span></div>
         <div className="sidebar-footer"><span className="sidebar-footer-mark">HKJC</span><span>Workforce Management</span></div>
       </aside>
 
       <main className="main-content">
-        <div className="breadcrumb">出勤管理 <span>/</span> 排班时间报备</div>
+        <div className="breadcrumb">排班管理 <span>/</span> 排班时间报备</div>
         <div className="page-heading">
           <div><h1>排班时间报备</h1><p>工作台</p></div>
           <div className="heading-actions">
