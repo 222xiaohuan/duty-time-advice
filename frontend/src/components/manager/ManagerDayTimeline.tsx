@@ -3,10 +3,11 @@ import { Plus, Save, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiDelete, apiPatch, apiPost, type SourceDictionaryItem, type StatusDictionaryItem } from "@/lib/api";
 import { employeeTypes, errorText, labelOf, posts } from "@/lib/admin";
+import { BaselineRule } from "@/lib/enums";
 import type { MockProfile } from "@/lib/identity";
 import { dayLocked, hkDate, hkTime } from "@/lib/week";
 
-export type TimelineEmployee = { id: number; empName: string; empTypeCode: string; postCode: string; cutoffDays: number | null };
+export type TimelineEmployee = { id: number; empName: string; empTypeCode: string; postCode: string; cutoffDays: number | null; baselineRule: string | null };
 export type TimelineRecord = { id: number; empId: number; businessDate: string; statusCode: string; sourceCode: string; startTime: string; endTime: string; remark: string | null; locked: number };
 export type TimelineShift = { id: number; empId: number; businessDate: string; shiftName: string; startTime: string; endTime: string; durationMinutes: number };
 type Form = { statusCode: string; allDay: boolean; startTime: string; endTime: string; endDayOffset: number; remark: string };
@@ -158,13 +159,16 @@ export function ManagerDayTimeline({ day, employees, records, shifts, statuses, 
       </div>
       {employees.map((employee) => {
         const locked = employee.cutoffDays === null || dayLocked(day, employee.cutoffDays);
+        const baseline = employee.baselineRule === BaselineRule.BASE_ROSTERABLE ? "rosterable" : employee.baselineRule === BaselineRule.BASE_UNROSTERABLE ? "unrosterable" : null;
+        const baselineText = baseline === "rosterable" ? "默认全部可排" : baseline === "unrosterable" ? "默认全部不可排" : null;
         const dayRecords = segmentsFor(records.filter((row) => row.empId === employee.id), day);
         const dayShifts = segmentsFor(shifts.filter((row) => row.empId === employee.id), day, true);
         const lanes = Math.max(1, ...dayRecords.map((segment) => segment.lane + 1));
         return <div className="manager-day-grid-row" key={employee.id}>
           <div className="manager-day-person"><strong>{employee.empName}</strong><small>{locked ? "只读" : `${labelOf(employeeTypes, employee.empTypeCode)} · ${labelOf(posts, employee.postCode)}`}</small><Button type="button" variant="ghost" size="icon" title={`为${employee.empName}新增时段`} aria-label={`为${employee.empName}新增时段`} disabled={locked || !statusCode} onClick={() => openNew(employee)}><Plus size={15} /></Button></div>
           <div className={`manager-day-row-body ${locked ? "locked" : ""}`}>
-            <div className="manager-day-track" style={{ height: `${Math.max(42, lanes * 30 + 12)}px` }} onPointerDown={(event) => pointerDown(event, employee)} onPointerMove={pointerMove} onPointerUp={(event) => pointerUp(event, employee)} onPointerCancel={() => { dragRef.current = null; setDrag(null); }} aria-label={`${employee.empName} ${day} 时间轴`}>
+            <div className={`manager-day-track ${baseline ? `baseline-${baseline}` : ""}`} style={{ height: `${Math.max(42, lanes * 30 + 12)}px` }} onPointerDown={(event) => pointerDown(event, employee)} onPointerMove={pointerMove} onPointerUp={(event) => pointerUp(event, employee)} onPointerCancel={() => { dragRef.current = null; setDrag(null); }} aria-label={`${employee.empName} ${day} 时间轴${baselineText ? `，${baselineText}` : ""}`}>
+              {baselineText && [0, 25, 50, 75].map((left) => <span className="manager-day-baseline-mark" style={{ left: `${left}%` }} aria-hidden="true" key={left}>{baselineText}</span>)}
               {dayRecords.map(({ item, start, end, lane, continued }) => {
                 const status = statuses.find((value) => value.statusCode === item.statusCode);
                 const color = status?.colorHex ?? defaultColor(item.statusCode);

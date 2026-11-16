@@ -217,6 +217,10 @@ button { cursor: pointer; }
 .manager-day-row-body.locked { background: #f6f8f9; }
 .manager-day-track, .manager-day-shifts { position: relative; background-image: linear-gradient(to right, #e4eaef 1px, transparent 1px); background-size: calc(100% / 24) 100%; }
 .manager-day-track { cursor: crosshair; touch-action: none; }
+.manager-day-track.baseline-rosterable { background-color: #eff8f0; }
+.manager-day-track.baseline-unrosterable { background-color: #fff1f1; }
+.manager-day-baseline-mark { position: absolute; top: 0; bottom: 0; width: 25%; display: flex; align-items: center; justify-content: center; color: #597d64; font-size: 11px; font-weight: 600; pointer-events: none; user-select: none; }
+.baseline-unrosterable .manager-day-baseline-mark { color: #a17676; }
 .manager-day-row-body.locked .manager-day-track { cursor: default; }
 .manager-day-bar { position: absolute; z-index: 2; display: block; height: 25px; min-width: 4px; padding: 0 5px; overflow: hidden; border: 0; border-radius: 2px; text-align: center; cursor: pointer; }
 .manager-day-bar span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; line-height: 25px; }

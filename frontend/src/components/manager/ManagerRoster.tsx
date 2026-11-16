@@ -8,7 +8,7 @@ import type { MockProfile } from "@/lib/identity";
 import { addDays, dayLocked, hkDate, hkTime, hkToday, mondayOf, shortDay } from "@/lib/week";
 
 type Mode = "day" | "person" | "week" | "month";
-type Employee = { id: number; empName: string; empTypeCode: string; postCode: string; cutoffDays: number | null };
+type Employee = { id: number; empName: string; empTypeCode: string; postCode: string; cutoffDays: number | null; baselineRule: string | null };
 type Directory = { orgId: number; orgName: string; employees: Employee[] };
 type RecordRow = { id: number; empId: number; businessDate: string; statusCode: string; sourceCode: string; startTime: string; endTime: string; remark: string | null; locked: number };
 type ShiftRow = { id: number; empId: number; businessDate: string; shiftName: string; startTime: string; endTime: string; durationMinutes: number };

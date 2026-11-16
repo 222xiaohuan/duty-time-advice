@@ -15,9 +15,12 @@ managerEmployeesRouter.get("/", requireRole("manager"), async (req, res, next) =
       prisma.dtaEmployee.findMany({ where: { tenantId: TENANT_ID, orgId, isDeleted: 0 }, orderBy: [{ empName: "asc" }, { id: "asc" }] }),
       prisma.dtaParamGroup.findMany({ where: { tenantId: TENANT_ID, orgId, isDeleted: 0 } }),
     ]);
-    ok(res, { orgId, orgName: org.orgName, employees: employees.map((employee) => ({
-      id: employee.id, empName: employee.empName, empTypeCode: employee.empTypeCode, postCode: employee.postCode,
-      cutoffDays: params.find((param) => param.empTypeCode === employee.empTypeCode)?.cutoffDays ?? null,
-    })) });
+    ok(res, { orgId, orgName: org.orgName, employees: employees.map((employee) => {
+      const param = params.find((item) => item.empTypeCode === employee.empTypeCode);
+      return {
+        id: employee.id, empName: employee.empName, empTypeCode: employee.empTypeCode, postCode: employee.postCode,
+        cutoffDays: param?.cutoffDays ?? null, baselineRule: param?.baselineRule ?? null,
+      };
+    }) });
   } catch (error) { next(error); }
 });
