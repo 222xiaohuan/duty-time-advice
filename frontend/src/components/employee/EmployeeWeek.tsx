@@ -13,6 +13,16 @@ type Form = { businessDate: string; statusCode: string; startTime: string; endTi
 type BatchResult = { businessDate: string; sourceId?: number | null; success: boolean; recordId?: number; message?: string };
 type BatchResponse = { created: number; failed: number; results: BatchResult[] };
 const initialForm = (date: string, statusCode: string): Form => ({ businessDate: date, statusCode, startTime: "09:00", endTime: "17:00", endDayOffset: 0, remark: "" });
+function submittedForm(element: HTMLFormElement, current: Form): Form {
+  const values = new FormData(element);
+  return { ...current,
+    statusCode: String(values.get("statusCode") ?? current.statusCode),
+    startTime: String(values.get("startTime") ?? current.startTime),
+    endTime: String(values.get("endTime") ?? current.endTime),
+    endDayOffset: Number(values.get("endDayOffset") ?? current.endDayOffset),
+    remark: String(values.get("remark") ?? current.remark),
+  };
+}
 
 export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sources: SourceDictionaryItem[] }) {
   const [monday, setMonday] = useState(() => mondayOf(hkToday()));
@@ -73,7 +83,8 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
     event.preventDefault(); if (!canEdit || selectedLocked || !formStatusAllowed) return;
     setBusy(true); setError(""); setMessage(""); setBatchResult(null);
     try {
-      const payload = { ...form, remark: form.remark || null };
+      const entered = submittedForm(event.currentTarget as HTMLFormElement, form);
+      const payload = { ...entered, remark: entered.remark || null };
       if (editingId === null) await apiPost("/rosterability-records", profile, payload);
       else await apiPatch(`/rosterability-records/${editingId}`, profile, payload);
       await loadRecords(); setEditingId(null); setMessage("时段已保存");
@@ -116,7 +127,7 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
     <div className="employee-lower">
       <section className="employee-editor">
         <div className="admin-intro"><h2>{batchMode ? "多日期统一设置" : editingId ? "编辑时段" : "新增时段"}</h2><span>{batchMode ? `${selectedDates.length} 个日期` : selectedDay}</span></div>
-        {batchMode ? <form onSubmit={(event) => { event.preventDefault(); if (selectedDates.length) void runBatch("/rosterability-records/batch/set-dates", { dates: selectedDates, statusCode: form.statusCode, startTime: form.startTime, endTime: form.endTime, endDayOffset: form.endDayOffset, remark: form.remark || null }); }} className="employee-form">
+        {batchMode ? <form onSubmit={(event) => { event.preventDefault(); if (selectedDates.length) { const entered = submittedForm(event.currentTarget, form); void runBatch("/rosterability-records/batch/set-dates", { dates: selectedDates, statusCode: entered.statusCode, startTime: entered.startTime, endTime: entered.endTime, endDayOffset: entered.endDayOffset, remark: entered.remark || null }); } }} className="employee-form">
           <RecordFields form={form} setForm={setForm} statuses={config?.allowedStatuses ?? []} disabled={!canEdit || busy} />
           <Button type="submit" disabled={!canEdit || !formStatusAllowed || busy || selectedDates.length === 0}><Save size={16} />应用到所选日期</Button>
         </form> : selectedLocked || !canEdit ? <div className="employee-readonly">{selectedLocked ? "该业务日期已到报备截止时间，记录只读" : "当前参数不允许员工提报"}</div> : <form onSubmit={save} className="employee-form">
@@ -132,6 +143,6 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
   </div>;
 }
 
-function RecordFields({ form, setForm, statuses, disabled }: { form: Form; setForm: (next: Form) => void; statuses: AllowedStatus[]; disabled: boolean }) {
-  return <div className="admin-form-grid"><label>可排性状态<select value={form.statusCode} disabled={disabled} onChange={(event) => setForm({ ...form, statusCode: event.target.value })}>{form.statusCode && !statuses.some((status) => status.statusCode === form.statusCode) && <option value={form.statusCode} disabled>{form.statusCode}（当前不可选择）</option>}{statuses.map((status) => <option value={status.statusCode} key={status.statusCode}>{status.statusName}</option>)}</select></label><label>开始时间<input type="time" required disabled={disabled} value={form.startTime} onChange={(event) => setForm({ ...form, startTime: event.target.value })} /></label><label>结束时间<input type="time" required disabled={disabled} value={form.endTime} onChange={(event) => setForm({ ...form, endTime: event.target.value })} /></label><label>结束日期<select value={form.endDayOffset} disabled={disabled} onChange={(event) => setForm({ ...form, endDayOffset: Number(event.target.value) })}><option value={0}>当天</option><option value={1}>次日（跨午夜）</option></select></label><label className="employee-remark">备注<input maxLength={500} disabled={disabled} value={form.remark} onChange={(event) => setForm({ ...form, remark: event.target.value })} /></label></div>;
+function RecordFields({ form, setForm, statuses, disabled }: { form: Form; setForm: React.Dispatch<React.SetStateAction<Form>>; statuses: AllowedStatus[]; disabled: boolean }) {
+  return <div className="admin-form-grid"><label>可排性状态<select name="statusCode" value={form.statusCode} disabled={disabled} onChange={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, statusCode: value })); }}>{form.statusCode && !statuses.some((status) => status.statusCode === form.statusCode) && <option value={form.statusCode} disabled>{form.statusCode}（当前不可选择）</option>}{statuses.map((status) => <option value={status.statusCode} key={status.statusCode}>{status.statusName}</option>)}</select></label><label>开始时间<input name="startTime" type="time" required disabled={disabled} value={form.startTime} onInput={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, startTime: value })); }} onChange={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, startTime: value })); }} /></label><label>结束时间<input name="endTime" type="time" required disabled={disabled} value={form.endTime} onInput={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, endTime: value })); }} onChange={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, endTime: value })); }} /></label><label>结束日期<select name="endDayOffset" value={form.endDayOffset} disabled={disabled} onChange={(event) => { const value = Number(event.currentTarget.value); setForm((current) => ({ ...current, endDayOffset: value })); }}><option value={0}>当天</option><option value={1}>次日（跨午夜）</option></select></label><label className="employee-remark">备注<input name="remark" maxLength={500} disabled={disabled} value={form.remark} onChange={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, remark: value })); }} /></label></div>;
 }
