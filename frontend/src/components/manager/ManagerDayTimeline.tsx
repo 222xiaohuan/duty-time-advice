@@ -162,7 +162,7 @@ export function ManagerDayTimeline({ day, days, employees, records, shifts, stat
     finally { setBusy(false); }
   }
 
-  return <div className="manager-day-timeline-page">
+  return <div className={`manager-day-timeline-page ${days ? "by-date" : ""}`}>
     <div className="manager-day-statuses" role="group" aria-label="拖拽创建状态">
       {activeStatuses.map((status) => <button type="button" key={status.statusCode} className={statusCode === status.statusCode ? "selected" : ""} aria-pressed={statusCode === status.statusCode} onClick={() => onStatusChange(status.statusCode)}><i style={{ backgroundColor: status.colorHex ?? defaultColor(status.statusCode) }} />{status.statusName}</button>)}
     </div>
