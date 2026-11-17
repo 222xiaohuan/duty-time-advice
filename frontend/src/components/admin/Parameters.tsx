@@ -1,5 +1,5 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { Check, Copy, Plus, Save } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Check, Copy, Plus, Save, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiGet, apiPost } from "@/lib/api";
 import { BaselineRule, SubmitMode } from "@/lib/enums";
@@ -10,6 +10,7 @@ type Rule = { empTypeCode: string; cutoffDays: number; baselineRule: string; sub
 type Scheme = { id: number; schemeName: string; sourceSchemeId: number | null; rules: Rule[]; assignedOrgIds: number[] };
 type Org = { id: number; orgName: string; paramSchemeId: number | null; schemeName: string | null; rules: Rule[] };
 type Draft = { schemeName: string; sourceSchemeId: number | null; rules: Rule[] };
+type Assignment = { scheme: Scheme; orgs: Org[] };
 
 const modes = [
   { code: SubmitMode.MODE_ONLY_UNROSTERABLE, name: "仅报不可排" },
@@ -26,6 +27,7 @@ const defaultRule = (empTypeCode: string): Rule => {
 const allowed = (baseline: string, mode: string) => mode === SubmitMode.MODE_ALL_STATUS || mode === SubmitMode.MODE_NO_SUBMIT ||
   (baseline === BaselineRule.BASE_ROSTERABLE ? mode === SubmitMode.MODE_ONLY_UNROSTERABLE : mode === SubmitMode.MODE_ONLY_ROSTERABLE);
 const summary = (rule?: Rule) => rule ? `${rule.baselineRule === BaselineRule.BASE_ROSTERABLE ? "默认可排" : "默认不可排"} · 锁定 ${rule.cutoffDays} 天 · 优先排${rule.priorityRosterEnable ? "开启" : "关闭"}` : "未配置";
+const assignmentKind = (org: Org, scheme: Scheme) => org.paramSchemeId === scheme.id ? "重新应用" : org.paramSchemeId !== null ? "更换方案" : org.rules.length ? "覆盖单独配置" : "首次绑定";
 function changesFor(org: Org, scheme: Scheme): string {
   const changes = employeeTypes.flatMap((type) => {
     const before = org.rules.find((rule) => rule.empTypeCode === type.code);
@@ -56,10 +58,18 @@ export function Parameters({ profile }: { profile: MockProfile }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [confirmation, setConfirmation] = useState<Assignment | null>(null);
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const chosen = schemes.find((scheme) => scheme.id === selectedId);
   const visibleOrgs = orgs.filter((org) => `${org.orgName} ${org.id} ${org.schemeName ?? ""}`.toLowerCase().includes(search.trim().toLowerCase()));
   const selectedOrgs = orgs.filter((org) => selectedOrgIds.includes(org.id));
   const allVisibleSelected = visibleOrgs.length > 0 && visibleOrgs.every((org) => selectedOrgIds.includes(org.id));
+  const assignmentCounts = confirmation && { first: confirmation.orgs.filter((org) => assignmentKind(org, confirmation.scheme) === "首次绑定").length,
+    switch: confirmation.orgs.filter((org) => assignmentKind(org, confirmation.scheme) === "更换方案").length,
+    repeat: confirmation.orgs.filter((org) => assignmentKind(org, confirmation.scheme) === "重新应用").length,
+    standalone: confirmation.orgs.filter((org) => assignmentKind(org, confirmation.scheme) === "覆盖单独配置").length };
+
+  useEffect(() => { if (confirmation && !dialogRef.current?.open) dialogRef.current?.showModal(); }, [confirmation]);
 
   async function load() {
     const [nextOrgs, nextSchemes] = await Promise.all([apiGet<Org[]>("/orgs", profile), apiGet<Scheme[]>("/param-schemes", profile)]);
@@ -91,13 +101,12 @@ export function Parameters({ profile }: { profile: MockProfile }) {
     } catch (cause) { setError(errorText(cause)); } finally { setBusy(false); }
   }
   async function assign() {
-    if (!chosen || !selectedOrgIds.length) return;
-    const names = selectedOrgs.slice(0, 5).map((org) => org.orgName).join("、");
-    if (!window.confirm(`将“${chosen.schemeName}”应用到 ${selectedOrgIds.length} 个组织（${names}${selectedOrgIds.length > 5 ? "等" : ""}）？配置将立即生效。`)) return;
+    if (!confirmation || busy) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      await apiPost(`/param-schemes/${chosen.id}/assign`, profile, { orgIds: selectedOrgIds });
-      await load(); setSelectedOrgIds([]); setMessage(`已为 ${selectedOrgs.length} 个组织应用“${chosen.schemeName}”`);
+      await apiPost(`/param-schemes/${confirmation.scheme.id}/assign`, profile, { orgIds: confirmation.orgs.map((org) => org.id) });
+      setSelectedOrgIds([]); setConfirmation(null); setMessage(`已为 ${confirmation.orgs.length} 个组织应用“${confirmation.scheme.schemeName}”`);
+      await load().catch((cause) => setError(`方案已应用，但刷新列表失败：${errorText(cause)}`));
     } catch (cause) { setError(errorText(cause)); } finally { setBusy(false); }
   }
 
@@ -112,7 +121,7 @@ export function Parameters({ profile }: { profile: MockProfile }) {
       <div className="parameter-toolbar">
         <label>查找组织<input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="组织名称或编号" /></label>
         <label>应用方案<select value={selectedId ?? ""} onChange={(event) => setSelectedId(Number(event.target.value))}>{schemes.map((scheme) => <option key={scheme.id} value={scheme.id}>{scheme.schemeName}</option>)}</select></label>
-        <Button type="button" disabled={!chosen || !selectedOrgIds.length || busy} onClick={() => void assign()}><Check size={16} />应用到 {selectedOrgIds.length} 个组织</Button>
+        <Button type="button" disabled={!chosen || !selectedOrgIds.length || busy} onClick={() => { if (chosen) { setError(""); setConfirmation({ scheme: chosen, orgs: selectedOrgs }); } }}><Check size={16} />应用到 {selectedOrgIds.length} 个组织</Button>
       </div>
       <div className="parameter-org-list" role="table" aria-label="组织参数方案分配">
         <div className="parameter-org-head" role="row"><label role="columnheader"><input type="checkbox" checked={allVisibleSelected} onChange={(event) => toggleVisible(event.target.checked)} disabled={!visibleOrgs.length} />组织</label><span role="columnheader">当前方案</span><span role="columnheader">员工类型规则</span></div>
@@ -123,7 +132,13 @@ export function Parameters({ profile }: { profile: MockProfile }) {
         </div>)}
         {!visibleOrgs.length && <p className="manager-no-data">没有匹配的组织</p>}
       </div>
-      {selectedOrgs.length > 0 && chosen && <div className="parameter-preview"><strong>应用预览 · {selectedOrgs.length} 个组织 → {chosen.schemeName}</strong><div className="parameter-preview-list">{selectedOrgs.map((org) => <div key={org.id}><b>{org.orgName}</b><span>{changesFor(org, chosen)}</span></div>)}</div></div>}
+      {confirmation && assignmentCounts && <dialog ref={dialogRef} className="parameter-confirm-dialog" aria-labelledby="parameter-confirm-title" onClose={() => setConfirmation(null)} onCancel={(event) => { if (busy) event.preventDefault(); }}>
+        <div className="parameter-confirm-head"><div><h3 id="parameter-confirm-title">确认应用方案</h3><p>{confirmation.scheme.schemeName}</p></div><Button type="button" variant="outline" size="icon" title="关闭" aria-label="关闭" disabled={busy} onClick={() => setConfirmation(null)}><X size={16} /></Button></div>
+        <div className="parameter-confirm-counts"><span>首次绑定 <b>{assignmentCounts.first}</b></span><span>更换方案 <b>{assignmentCounts.switch}</b></span><span>重新应用 <b>{assignmentCounts.repeat}</b></span>{assignmentCounts.standalone > 0 && <span>覆盖单独配置 <b>{assignmentCounts.standalone}</b></span>}</div>
+        <div className="parameter-confirm-rules"><strong>应用后员工类型规则</strong>{employeeTypes.map((type) => { const rule = confirmation.scheme.rules.find((item) => item.empTypeCode === type.code); return <div key={type.code}><b>{type.name}</b><span>{rule ? `${summary(rule)} · ${modes.find((mode) => mode.code === rule.submitMode)?.name ?? rule.submitMode} · 生成 ${rule.autoGenRangeWeek} 周 · 员工编辑${rule.empEditEnable ? "开启" : "关闭"}` : "方案缺少规则"}</span></div>; })}</div>
+        <details className="parameter-confirm-details"><summary>查看 {confirmation.orgs.length} 个组织的变更明细</summary><div className="parameter-confirm-orgs">{confirmation.orgs.map((org) => <div key={org.id}><div><b>{org.orgName}</b><small>{assignmentKind(org, confirmation.scheme)} · 当前：{org.schemeName ?? (org.rules.length ? "单独配置" : "未配置")}</small></div><span>{changesFor(org, confirmation.scheme)}</span></div>)}</div></details>
+        <div className="parameter-confirm-actions">{error && <p className="form-error" role="alert">{error}</p>}<p className="parameter-confirm-note">确认后立即生效，并覆盖所选组织的当前参数。</p><div><Button type="button" variant="outline" disabled={busy} onClick={() => setConfirmation(null)}>取消</Button><Button type="button" disabled={busy} onClick={() => void assign()}><Check size={16} />{busy ? "应用中" : `确认应用到 ${confirmation.orgs.length} 个组织`}</Button></div></div>
+      </dialog>}
     </> : <div className="parameter-scheme-layout">
       <aside className="parameter-scheme-list" aria-label="参数方案列表">
         <Button type="button" variant="outline" onClick={() => { setDraft({ schemeName: "", sourceSchemeId: null, rules: employeeTypes.map((type) => defaultRule(type.code)) }); setError(""); setMessage(""); }}><Plus size={16} />新建方案</Button>
