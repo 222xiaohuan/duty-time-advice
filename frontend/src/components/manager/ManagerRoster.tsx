@@ -28,6 +28,14 @@ function durationLabel(startTime: string, endTime: string): string {
   return `${Number((minutes / 60).toFixed(1))}小时`;
 }
 
+function durationShortLabel(startTime: string, endTime: string): string {
+  return durationLabel(startTime, endTime).replace("小时", "h");
+}
+
+function durationMinutesLabel(minutes: number): string {
+  return `${Number((minutes / 60).toFixed(1))}小时`;
+}
+
 function period(mode: Mode, day: string) {
   if (mode === "day") return { from: day, to: day };
   const from = mode === "person" ? addDays(day, -new Date(`${day}T00:00:00Z`).getUTCDay()) : mondayOf(day);
@@ -163,16 +171,20 @@ export function ManagerRoster({ profile, statuses, sources, onOpenSchedule }: { 
     const entries = shownRecords.filter((row) => row.empId === empId && row.businessDate === day);
     const work = shownShifts.filter((row) => row.empId === empId && row.businessDate === day);
     return <button type="button" className={`manager-cell ${selection?.empId === empId && selection.day === day ? "selected" : ""}`} key={`${empId}-${day}`} onClick={() => select(empId, day)} aria-label={`${directory?.employees.find((employee) => employee.id === empId)?.empName} ${day}`}>
-      {entries.length > 0 && <span className="manager-week-records" aria-label="可排性记录">{entries.map((row) => {
+      {entries.length > 0 && <span className="manager-week-records" aria-label="可排性时间段">{entries.map((row) => {
         const overnight = hkDate(row.endTime) !== row.businessDate;
         const startMinutes = Number(hkTime(row.startTime).slice(0, 2)) * 60 + Number(hkTime(row.startTime).slice(3));
         const endMinutes = overnight ? 1440 : Number(hkTime(row.endTime).slice(0, 2)) * 60 + Number(hkTime(row.endTime).slice(3));
         const left = startMinutes / 1440 * 100;
         const width = Math.max(5, Math.min(100 - left, (endMinutes - startMinutes) / 1440 * 100));
         const label = `${day} · ${labelStatus(row.statusCode)} ${hkTime(row.startTime)}–${overnight ? "次日 " : ""}${hkTime(row.endTime)} · ${durationLabel(row.startTime, row.endTime)}`;
-        return <span className="manager-week-record-track" key={row.id} title={label} aria-label={label}><span className={statusClass(row.statusCode)} style={{ left: `${left}%`, width: `${width}%`, backgroundColor: statusColor(row.statusCode, statuses) }} /></span>;
+        return <span className={`manager-week-record-track ${statusClass(row.statusCode)}`} key={row.id} title={label} aria-label={label} data-tooltip={label} style={{ left: `${left}%`, width: `${width}%`, backgroundColor: statusColor(row.statusCode, statuses) }}><span>{durationShortLabel(row.startTime, row.endTime)}</span></span>;
       })}</span>}
-      {work.map((row) => <span className="manager-chip shift" key={`s-${row.id}`}>{row.shiftName} {hkTime(row.startTime)}–{hkTime(row.endTime)}</span>)}
+      {work.length > 0 && <span className="manager-week-shifts" aria-label="排班时间">{work.map((row) => {
+        const overnight = hkDate(row.endTime) !== row.businessDate;
+        const label = `${day} · ${row.shiftName} ${hkTime(row.startTime)}–${overnight ? "次日 " : ""}${hkTime(row.endTime)} · ${durationMinutesLabel(row.durationMinutes)}`;
+        return <span className="manager-chip shift" key={`s-${row.id}`} title={label} aria-label={label}>{row.shiftName} {hkTime(row.startTime)}–{overnight ? "次日 " : ""}{hkTime(row.endTime)} · {durationMinutesLabel(row.durationMinutes)}</span>;
+      })}</span>}
       {!entries.length && !work.length && <span className="manager-empty">—</span>}
     </button>;
   }
