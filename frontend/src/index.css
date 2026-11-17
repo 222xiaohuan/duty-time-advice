@@ -361,11 +361,11 @@ button { cursor: pointer; }
 .schedule-person small { color: #778692; font-size: 10px; overflow-wrap: anywhere; }
 .schedule-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; min-height: 105px; padding: 5px; border-right: 1px solid #e2e7ec; border-bottom: 1px solid #e2e7ec; background: #fff; }
 .schedule-cell.selected { background: #f7fbfc; box-shadow: inset 0 0 0 1px #2a8bb0; }
-.schedule-markers { display: flex; flex-direction: column; gap: 2px; min-height: 20px; }
-.schedule-marker-track { position: relative; width: 100%; height: 20px; padding: 0; border: 0; border-radius: 2px; background: transparent; cursor: pointer; }
+.schedule-markers { position: relative; height: 20px; flex: none; }
+.schedule-marker-track { position: absolute; top: 0; height: 20px; padding: 0; border: 0; border-radius: 2px; background: transparent; cursor: pointer; }
 .schedule-marker-track:hover, .schedule-marker-track[aria-pressed="true"] { background: #e9f0f4; }
 .schedule-marker-track:focus-visible { outline: 2px solid #0c6b8e; outline-offset: 1px; }
-.schedule-marker-track span { position: absolute; top: 8px; height: 4px; border-radius: 2px; }
+.schedule-marker-track span { position: absolute; top: 8px; left: 0; width: 100%; height: 4px; border-radius: 2px; }
 .schedule-marker-detail { position: fixed; right: 20px; bottom: 20px; z-index: 20; display: flex; align-items: center; gap: 11px; width: min(390px, calc(100vw - 32px)); min-height: 66px; padding: 10px 9px 10px 13px; border: 1px solid #bdcbd5; border-radius: 4px; background: #fff; box-shadow: 0 8px 24px #102b4230; }
 .schedule-marker-detail > i { flex: none; width: 5px; height: 36px; border-radius: 2px; }
 .schedule-marker-detail > div { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 0; }

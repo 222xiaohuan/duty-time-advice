@@ -141,8 +141,8 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
       const name = status?.statusName ?? row.statusCode;
       const overnight = hkDate(row.endTime) !== row.businessDate ? "次日 " : "";
       const label = `${continued ? "前日延续 · " : ""}${name} ${hkTime(row.startTime)}–${overnight}${hkTime(row.endTime)} · ${durationLabelFromTimes(row.startTime, row.endTime)}`;
-      return <button type="button" className="schedule-marker-track" key={`${row.id}-${day}`} title={label} aria-label={label} aria-pressed={selectedMarker?.id === row.id && selectedMarker.day === day} onClick={() => setSelectedMarker({ id: row.id, day })}>
-        <span style={{ left: `${left}%`, width: `${width}%`, backgroundColor: status?.colorHex ?? (row.statusCode === RosterabilityStatus.ROSTERABLE ? "#4a90e2" : row.statusCode === RosterabilityStatus.PRIORITY_ROSTERABLE ? "#2e8b57" : "#a9a9a9") }} />
+      return <button type="button" className="schedule-marker-track" key={`${row.id}-${day}`} style={{ left: `${left}%`, width: `${width}%` }} title={label} aria-label={label} aria-pressed={selectedMarker?.id === row.id && selectedMarker.day === day} onClick={() => setSelectedMarker({ id: row.id, day })}>
+        <span style={{ backgroundColor: status?.colorHex ?? (row.statusCode === RosterabilityStatus.ROSTERABLE ? "#4a90e2" : row.statusCode === RosterabilityStatus.PRIORITY_ROSTERABLE ? "#2e8b57" : "#a9a9a9") }} />
       </button>;
     })}</div>;
   }
