@@ -1,10 +1,11 @@
-import { useEffect, useState, type FormEvent } from "react";
-import { ChevronLeft, ChevronRight, Plus, RefreshCw, Save, Trash2, X } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { ChevronLeft, ChevronRight, Plus, RefreshCw, Save, Search, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiDelete, apiGet, apiPatch, apiPost, type StatusDictionaryItem } from "@/lib/api";
 import { employeeTypes, errorText, labelOf, posts, weekdays } from "@/lib/admin";
 import { RosterabilityStatus } from "@/lib/enums";
 import type { MockProfile } from "@/lib/identity";
+import { shiftPresets, type ShiftPreset } from "@/lib/shiftPresets";
 import { addDays, hkDate, hkTime, hkToday, mondayOf, shortDay } from "@/lib/week";
 
 type Employee = { id: number; empName: string; empTypeCode: string; postCode: string; priorityRosterEnable: number };
@@ -15,6 +16,11 @@ type Selection = { empId: number; day: string };
 type MarkerSelection = { id: number; day: string };
 type ShiftForm = { shiftName: string; startTime: string; endTime: string; endDayOffset: number };
 const blankShift = (): ShiftForm => ({ shiftName: "工作班", startTime: "09:00", endTime: "17:00", endDayOffset: 0 });
+
+function presetDuration(preset: ShiftPreset): number {
+  const minutes = (time: string) => { const [hour, minute] = time.split(":").map(Number); return hour * 60 + minute; };
+  return preset.endDayOffset * 1440 + minutes(preset.endTime) - minutes(preset.startTime);
+}
 
 function minuteOf(iso: string): number {
   const [hour, minute] = hkTime(iso).split(":").map(Number);
@@ -42,6 +48,9 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
   const [form, setForm] = useState<ShiftForm>(blankShift);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [dialogMode, setDialogMode] = useState<"catalog" | "edit" | null>(null);
+  const [presetSearch, setPresetSearch] = useState("");
+  const dialogRef = useRef<HTMLDialogElement>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -56,14 +65,20 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
   const markerEmployee = directory?.employees.find((employee) => employee.id === markerRecord?.empId);
   const markerStatus = statuses.find((status) => status.statusCode === markerRecord?.statusCode);
   const activeStatuses = statuses.filter((status) => status.enabled === 1 && (status.statusCode === RosterabilityStatus.ROSTERABLE || status.statusCode === RosterabilityStatus.UNROSTERABLE || (status.statusCode === RosterabilityStatus.PRIORITY_ROSTERABLE && directory?.employees.some((employee) => employee.priorityRosterEnable === 1))));
+  const visiblePresets = shiftPresets.filter((preset) => `${preset.code} ${preset.name} ${preset.startTime} ${preset.endTime}`.toLowerCase().includes(presetSearch.trim().toLowerCase()));
+
+  useEffect(() => {
+    if (!dialogMode || dialogRef.current?.open) return;
+    dialogRef.current?.showModal();
+    if (dialogMode === "catalog") dialogRef.current?.querySelector<HTMLInputElement>('input[type="search"]')?.focus();
+  }, [dialogMode]);
 
   useEffect(() => {
     let active = true;
-    setDirectory(null); setSelection(null); setSelectedMarker(null); setError("");
+    setDirectory(null); setSelection(null); setDialogMode(null); setSelectedMarker(null); setError("");
     apiGet<Directory>("/manager/employees", profile).then((data) => {
       if (!active) return;
       setDirectory(data);
-      if (data.employees[0]) setSelection({ empId: data.employees[0].id, day: hkToday() });
     }).catch((cause: unknown) => { if (active) { setError(errorText(cause)); setLoading(false); } });
     return () => { active = false; };
   }, [profile]);
@@ -85,28 +100,28 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
     if (!directory) return;
     const matching = directory.employees.filter((employee) =>
       (!employeeFilter || String(employee.id) === employeeFilter) && (!typeFilter || employee.empTypeCode === typeFilter) && (!postFilter || employee.postCode === postFilter));
-    if (selection && matching.some((employee) => employee.id === selection.empId)) return;
-    setSelection(matching[0] ? { empId: matching[0].id, day: monday } : null);
-    setEditingId(null); setForm(blankShift());
+    if (selection && !matching.some((employee) => employee.id === selection.empId)) closeDialog();
   }, [directory, employeeFilter, typeFilter, postFilter, selection?.empId]);
 
+  function closeDialog() {
+    setDialogMode(null); setSelection(null); setEditingId(null); setForm(blankShift()); setPresetSearch("");
+  }
+
   function select(empId: number, day: string) {
-    setSelection({ empId, day }); setSelectedMarker(null); setEditingId(null); setForm(blankShift());
-    window.requestAnimationFrame(() => document.getElementById("schedule-editor")?.scrollIntoView({ behavior: "smooth", block: "nearest" }));
+    setSelection({ empId, day }); setSelectedMarker(null); setEditingId(null); setPresetSearch(""); setError(""); setDialogMode("catalog");
   }
 
   function edit(shift: ShiftRow) {
-    select(shift.empId, shift.businessDate);
-    setEditingId(shift.id);
+    setSelection({ empId: shift.empId, day: shift.businessDate }); setSelectedMarker(null); setError(""); setEditingId(shift.id);
     setForm({ shiftName: shift.shiftName, startTime: hkTime(shift.startTime), endTime: hkTime(shift.endTime), endDayOffset: hkDate(shift.endTime) === shift.businessDate ? 0 : 1 });
+    setDialogMode("edit");
   }
 
   function move(weeks: number) {
     const next = addDays(monday, weeks * 7);
     setMonday(next);
     setSelectedMarker(null);
-    setSelection((current) => current ? { ...current, day: next } : current);
-    setEditingId(null); setForm(blankShift());
+    closeDialog();
   }
 
   async function run(action: () => Promise<unknown>, success: string): Promise<boolean> {
@@ -118,15 +133,26 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
 
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selection) return;
+    if (!selection || editingId === null) return;
     const values = new FormData(event.currentTarget);
     const body = {
       empId: selection.empId, businessDate: selection.day,
       shiftName: String(values.get("shiftName")), startTime: String(values.get("startTime")),
       endTime: String(values.get("endTime")), endDayOffset: Number(values.get("endDayOffset")),
     };
-    void run(() => editingId === null ? apiPost("/mock-shifts", profile, body) : apiPatch(`/mock-shifts/${editingId}`, profile, body), "模拟班次已保存")
-      .then((saved) => { if (saved) { setEditingId(null); setForm(blankShift()); } });
+    void run(() => apiPatch(`/mock-shifts/${editingId}`, profile, body), "模拟班次已更新").then((saved) => { if (saved) closeDialog(); });
+  }
+
+  function assignPreset(preset: ShiftPreset) {
+    if (!selection || busy) return;
+    const body = { empId: selection.empId, businessDate: selection.day, shiftName: preset.name,
+      startTime: preset.startTime, endTime: preset.endTime, endDayOffset: preset.endDayOffset };
+    void run(() => apiPost("/mock-shifts", profile, body), "模拟班次已排入").then((saved) => { if (saved) closeDialog(); });
+  }
+
+  function removeShift() {
+    if (editingId === null || busy || !window.confirm("删除这个模拟班次？")) return;
+    void run(() => apiDelete(`/mock-shifts/${editingId}`, profile), "模拟班次已删除").then((deleted) => { if (deleted) closeDialog(); });
   }
 
   function markers(empId: number, day: string) {
@@ -153,7 +179,7 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
         <Button type="button" variant="outline" size="icon" aria-label="上一周" title="上一周" onClick={() => move(-1)}><ChevronLeft size={16} /></Button>
         <strong>{monday} — {weekDays[6]}</strong>
         <Button type="button" variant="outline" size="icon" aria-label="下一周" title="下一周" onClick={() => move(1)}><ChevronRight size={16} /></Button>
-        <Button type="button" variant="outline" onClick={() => { const next = mondayOf(hkToday()); setMonday(next); setSelectedMarker(null); setSelection((current) => current ? { ...current, day: hkToday() } : current); }}>本周</Button>
+        <Button type="button" variant="outline" onClick={() => { setMonday(mondayOf(hkToday())); setSelectedMarker(null); closeDialog(); }}>本周</Button>
         <Button type="button" variant="outline" size="icon" aria-label="刷新排班" title="刷新排班" onClick={() => setRefresh((value) => value + 1)}><RefreshCw size={16} /></Button>
       </div>
     </div>
@@ -164,7 +190,7 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
       <label>岗位<select value={postFilter} onChange={(event) => { setPostFilter(event.target.value); setSelectedMarker(null); }}><option value="">全部岗位</option>{posts.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label>
     </div>
     <div className="schedule-legend" aria-label="可排性状态">{activeStatuses.map((status) => <span key={status.statusCode}><i style={{ backgroundColor: status.colorHex ?? (status.statusCode === RosterabilityStatus.ROSTERABLE ? "#4a90e2" : status.statusCode === RosterabilityStatus.PRIORITY_ROSTERABLE ? "#2e8b57" : "#a9a9a9") }} />{status.statusName}</span>)}</div>
-    {error && <p className="form-error" role="alert">{error}</p>}{notice && <p className="form-success" role="status">{notice}</p>}
+    {!dialogMode && error && <p className="form-error" role="alert">{error}</p>}{notice && <p className="form-success" role="status">{notice}</p>}
     <section className="schedule-board" aria-label="模拟排班周表">
       {loading ? <div className="employee-loading">正在加载班次和可排性记录</div> : employees.length === 0 ? <div className="manager-no-data">当前筛选下没有员工</div> : <div className="schedule-scroll"><div className="schedule-grid">
         <div className="schedule-column-head">员工</div>{weekDays.map((day, index) => <div className="schedule-column-head" key={day}>{shortDay(day)} {weekdays[index]}</div>)}
@@ -183,21 +209,23 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
       <div><strong>{markerEmployee.empName} · {markerStatus?.statusName ?? markerRecord.statusCode}</strong><span>{markerRecord.businessDate} {hkTime(markerRecord.startTime)}–{hkDate(markerRecord.endTime) !== markerRecord.businessDate ? "次日 " : ""}{hkTime(markerRecord.endTime)} · {durationLabelFromTimes(markerRecord.startTime, markerRecord.endTime)}{selectedMarker.day !== markerRecord.businessDate ? ` · ${selectedMarker.day} 延续` : ""}</span></div>
       <Button type="button" variant="ghost" size="icon" title="关闭可排性详情" aria-label="关闭可排性详情" onClick={() => setSelectedMarker(null)}><X size={16} /></Button>
     </div>}
-    <section id="schedule-editor" className="schedule-editor" aria-label="模拟班次维护">
-      <div className="admin-intro"><h2>{selectedEmployee && selection ? `${selectedEmployee.empName} · ${selection.day}` : "模拟班次"}</h2><span>{selectedShifts.length} 个班次</span></div>
-      {selection && selectedEmployee && <div className="schedule-editor-layout">
-        <div className="schedule-shift-list">{selectedShifts.map((shift) => <div key={shift.id}><div><strong>{shift.shiftName}</strong><span>{hkTime(shift.startTime)}–{hkDate(shift.endTime) !== shift.businessDate ? "次日 " : ""}{hkTime(shift.endTime)} · {durationLabel(shift.durationMinutes)}</span></div><div className="schedule-shift-actions"><Button type="button" size="sm" variant="outline" onClick={() => edit(shift)}>编辑</Button><Button type="button" size="icon" variant="outline" title="删除班次" aria-label={`删除${shift.shiftName}`} onClick={() => { if (window.confirm("删除这个模拟班次？")) void run(() => apiDelete(`/mock-shifts/${shift.id}`, profile), "模拟班次已删除"); }}><Trash2 size={15} /></Button></div></div>)}{selectedShifts.length === 0 && <p>当日暂无模拟班次</p>}</div>
-        <form className="schedule-form" onSubmit={save}>
-          <div className="manager-editor-head"><h3>{editingId ? "编辑班次" : "新增班次"}</h3>{editingId && <Button type="button" variant="outline" size="sm" onClick={() => { setEditingId(null); setForm(blankShift()); }}>取消编辑</Button>}</div>
+    {dialogMode && selection && selectedEmployee && <dialog ref={dialogRef} className="schedule-dialog" aria-labelledby="schedule-dialog-title" onClose={closeDialog} onCancel={(event) => { if (busy) event.preventDefault(); }}>
+      <div className="schedule-dialog-head"><div><h2 id="schedule-dialog-title">{dialogMode === "catalog" ? "选择班次" : "编辑班次"}</h2><p>{selectedEmployee.empName} · {selection.day} · 已排 {selectedShifts.length} 个班次</p></div><Button type="button" variant="outline" size="icon" title="关闭" aria-label="关闭" disabled={busy} onClick={closeDialog}><X size={16} /></Button></div>
+      {dialogMode === "catalog" ? <>
+        <label className="schedule-catalog-search"><Search size={17} /><input type="search" autoFocus value={presetSearch} onChange={(event) => setPresetSearch(event.target.value)} placeholder="搜索代码、名称或时间" aria-label="搜索班次" /></label>
+        <div className="schedule-catalog-list" aria-label="班次清单">{visiblePresets.map((preset) => <button type="button" className="schedule-preset" key={preset.code} disabled={busy} onClick={() => assignPreset(preset)}>
+          <i style={{ backgroundColor: preset.color }} /><span className="schedule-preset-code">{preset.code}</span><strong>{preset.name}</strong><span className="schedule-preset-time">{preset.startTime}–{preset.endDayOffset ? "次日 " : ""}{preset.endTime} · {durationLabel(presetDuration(preset))}</span>
+        </button>)}{visiblePresets.length === 0 && <p className="manager-no-data">没有匹配的班次</p>}</div>
+      </> : <form className="schedule-dialog-form" onSubmit={save}>
           <div className="admin-form-grid">
             <label className="employee-remark">班次名称<input name="shiftName" required maxLength={100} value={form.shiftName} onChange={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, shiftName: value })); }} /></label>
             <label>开始时间<input name="startTime" type="time" required value={form.startTime} onInput={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, startTime: value })); }} onChange={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, startTime: value })); }} /></label>
             <label>结束时间<input name="endTime" type="time" required value={form.endTime} onInput={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, endTime: value })); }} onChange={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, endTime: value })); }} /></label>
             <label>结束日期<select name="endDayOffset" value={form.endDayOffset} onChange={(event) => { const value = Number(event.currentTarget.value); setForm((current) => ({ ...current, endDayOffset: value })); }}><option value={0}>当天</option><option value={1}>次日（跨午夜）</option></select></label>
           </div>
-          <Button type="submit" disabled={busy}><Save size={15} />{editingId ? "保存修改" : "新增班次"}</Button>
-        </form>
-      </div>}
-    </section>
+          <div className="schedule-dialog-actions"><Button type="button" variant="outline" disabled={busy} onClick={removeShift}><Trash2 size={15} />删除</Button><Button type="submit" disabled={busy}><Save size={15} />保存修改</Button></div>
+        </form>}
+      {error && <p className="form-error" role="alert">{error}</p>}
+    </dialog>}
   </div>;
 }
