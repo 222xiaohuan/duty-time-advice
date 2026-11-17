@@ -12,6 +12,7 @@ import { templatesRouter } from "./routes/templates";
 import { templateGenerationRouter } from "./routes/templateGeneration";
 import { rosterabilityRecordsRouter } from "./routes/rosterabilityRecords";
 import { orgsRouter } from "./routes/orgs";
+import { paramSchemesRouter } from "./routes/paramSchemes";
 
 export function createApp(): Express {
   const app = express();
@@ -26,6 +27,7 @@ export function createApp(): Express {
   app.use("/api/me", meRouter);
   app.use("/api/dictionaries", dictionariesRouter);
   app.use("/api/param-groups", paramGroupsRouter);
+  app.use("/api/param-schemes", paramSchemesRouter);
   app.use("/api/mock-shifts", mockShiftsRouter);
   app.use("/api/manager/employees", managerEmployeesRouter);
   app.use("/api/templates", templatesRouter);

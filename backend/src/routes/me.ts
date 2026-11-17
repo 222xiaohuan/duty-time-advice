@@ -22,7 +22,7 @@ meRouter.get("/rosterability-config", requireRole("employee"), async (req, res, 
     ]);
     if (!param) throw new AppError(ErrorCode.NOT_FOUND, "该员工未配置可排性参数", 404);
     if (!org) throw new AppError(ErrorCode.NOT_FOUND, "员工所属组织不存在", 404);
-    const allowed = new Set(allowedRosterabilityStatuses(param.baselineRule, param.submitMode, org.priorityRosterEnable === 1));
+    const allowed = new Set(allowedRosterabilityStatuses(param.baselineRule, param.submitMode, param.priorityRosterEnable === 1));
     const statuses = await prisma.dtaRosterabilityStatusDict.findMany({
       where: { tenantId: TENANT_ID, isDeleted: 0, enabled: 1, empSelfEdit: 1 },
       orderBy: { id: "asc" },
@@ -31,7 +31,7 @@ meRouter.get("/rosterability-config", requireRole("employee"), async (req, res, 
       empId: employee.id, empName: employee.empName, orgId: employee.orgId, empTypeCode: employee.empTypeCode,
       cutoffDays: param.cutoffDays, baselineRule: param.baselineRule, submitMode: param.submitMode,
       empEditEnable: param.empEditEnable,
-      priorityRosterEnable: org.priorityRosterEnable,
+      priorityRosterEnable: param.priorityRosterEnable,
       allowedStatuses: statuses.filter((status) => allowed.has(status.statusCode as DtaRosterabilityStatus)).map((status) => ({
         statusCode: status.statusCode, statusName: status.statusName, colorHex: status.colorHex,
       })),

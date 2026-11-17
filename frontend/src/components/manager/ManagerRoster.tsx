@@ -11,7 +11,7 @@ import { addDays, dayLocked, hkDate, hkTime, hkToday, managerLockMessage, monday
 
 type Mode = "day" | "person" | "week";
 type Employee = { id: number; empName: string; empTypeCode: string; postCode: string; cutoffDays: number | null; baselineRule: string | null; priorityRosterEnable: number };
-type Directory = { orgId: number; orgName: string; priorityRosterEnable: number; employees: Employee[] };
+type Directory = { orgId: number; orgName: string; employees: Employee[] };
 type RecordRow = { id: number; empId: number; businessDate: string; statusCode: string; sourceCode: string; startTime: string; endTime: string; remark: string | null; locked: number };
 type ShiftRow = { id: number; empId: number; businessDate: string; shiftName: string; startTime: string; endTime: string; durationMinutes: number };
 type Selection = { empId: number; day: string };
@@ -115,8 +115,8 @@ export function ManagerRoster({ profile, statuses, sources }: { profile: MockPro
   const locked = !selectedEmployee || selectedEmployee.cutoffDays === null || !selection || dayLocked(selection.day, selectedEmployee.cutoffDays);
   const readOnly = locked || Boolean(editingRow?.locked) || editingRow?.sourceCode === "EXTERNAL_SYNC" || editingRow?.sourceCode === "BULK_IMPORT";
   const selectedLockMessage = locked && selection ? managerLockMessage(selection.day, selectedEmployee?.cutoffDays ?? null) ?? "暂无可排性参数" : null;
-  const statusOptions = statuses.filter((status) => status.enabled === 1 && (status.statusCode === RosterabilityStatus.ROSTERABLE || status.statusCode === RosterabilityStatus.UNROSTERABLE || (status.statusCode === RosterabilityStatus.PRIORITY_ROSTERABLE && directory?.priorityRosterEnable === 1)));
-  const editableStatuses = statusOptions.filter((status) => selectedEmployee?.baselineRule === BaselineRule.BASE_ROSTERABLE ? status.statusCode !== RosterabilityStatus.ROSTERABLE : selectedEmployee?.baselineRule === BaselineRule.BASE_UNROSTERABLE ? status.statusCode !== RosterabilityStatus.UNROSTERABLE : false);
+  const statusOptions = statuses.filter((status) => status.enabled === 1 && (status.statusCode === RosterabilityStatus.ROSTERABLE || status.statusCode === RosterabilityStatus.UNROSTERABLE || (status.statusCode === RosterabilityStatus.PRIORITY_ROSTERABLE && directory?.employees.some((employee) => employee.priorityRosterEnable === 1))));
+  const editableStatuses = statusOptions.filter((status) => (status.statusCode !== RosterabilityStatus.PRIORITY_ROSTERABLE || selectedEmployee?.priorityRosterEnable === 1) && (selectedEmployee?.baselineRule === BaselineRule.BASE_ROSTERABLE ? status.statusCode !== RosterabilityStatus.ROSTERABLE : selectedEmployee?.baselineRule === BaselineRule.BASE_UNROSTERABLE ? status.statusCode !== RosterabilityStatus.UNROSTERABLE : false));
   const baselineMessage = baselineStatusMessage(selectedEmployee?.baselineRule, recordForm.statusCode);
   const labelStatus = (code: string) => statusOptions.find((status) => status.statusCode === code)?.statusName ?? code;
   const labelSource = (code: string) => sources.find((source) => source.sourceCode === code)?.sourceName ?? code;

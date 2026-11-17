@@ -79,12 +79,12 @@ async function checkStatus(identity: MockIdentity, statusCode: DtaRosterabilityS
   if (!status) bad("该可排性状态未启用");
   const org = await prisma.dtaOrg.findFirst({ where: { id: employee.orgId, tenantId: TENANT_ID, isDeleted: 0 } });
   if (!org) missing("员工所属组织不存在");
-  if (statusCode === DtaRosterabilityStatus.PRIORITY_ROSTERABLE && org.priorityRosterEnable !== 1) forbidden("所属组织未启用优先排班模式");
+  if (statusCode === DtaRosterabilityStatus.PRIORITY_ROSTERABLE && param.priorityRosterEnable !== 1) forbidden("所属组织与员工类型未启用优先排班模式");
   const baselineMessage = baselineStatusMessage(param.baselineRule, statusCode);
   if (baselineMessage) bad(baselineMessage);
   if (identity.role !== "employee") return;
   if (status.empSelfEdit !== 1) forbidden("该可排性状态不允许员工自主选择");
-  if (!allowedRosterabilityStatuses(param.baselineRule, param.submitMode, org.priorityRosterEnable === 1).includes(statusCode)) forbidden("当前参数不允许提报该可排性状态");
+  if (!allowedRosterabilityStatuses(param.baselineRule, param.submitMode, param.priorityRosterEnable === 1).includes(statusCode)) forbidden("当前参数不允许提报该可排性状态");
 }
 
 async function checkShift(empId: number, input: RecordInput): Promise<void> {

@@ -26,12 +26,13 @@ beforeAll(async () => {
 
 describe("T010 经理员工目录", () => {
   it("仅返回所辖组织的员工与有效截止参数", async () => {
+    await prisma.dtaParamGroup.update({ where: { tenantId_orgId_empTypeCode: { tenantId: 1, orgId: 1, empTypeCode: "T010C_ROSTERABLE" } }, data: { priorityRosterEnable: 1 } });
     const first = await request(app).get("/api/manager/employees").set(manager1);
     expect(first.status).toBe(200);
     expect(first.body.data.orgId).toBe(1);
     expect(first.body.data.employees).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 701, empTypeCode: "T010C_ROSTERABLE", postCode: "BETTING_SERVICE", cutoffDays: 3, baselineRule: "BASE_ROSTERABLE" }),
-      expect.objectContaining({ id: 703, empTypeCode: "T010C_UNROSTERABLE", cutoffDays: 2, baselineRule: "BASE_UNROSTERABLE" }),
+      expect.objectContaining({ id: 701, empTypeCode: "T010C_ROSTERABLE", postCode: "BETTING_SERVICE", cutoffDays: 3, baselineRule: "BASE_ROSTERABLE", priorityRosterEnable: 1 }),
+      expect.objectContaining({ id: 703, empTypeCode: "T010C_UNROSTERABLE", cutoffDays: 2, baselineRule: "BASE_UNROSTERABLE", priorityRosterEnable: 0 }),
     ]));
     expect(first.body.data.employees.some((row: { id: number }) => row.id === 702)).toBe(false);
     const second = await request(app).get("/api/manager/employees").set(manager2);

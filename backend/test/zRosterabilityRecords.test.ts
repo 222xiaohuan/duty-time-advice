@@ -44,14 +44,14 @@ beforeAll(async () => {
 });
 
 describe("T004 可排性记录", () => {
-  it("组织开关控制优先排记录，开启后经理可以维护", async () => {
+  it("组织与员工类型开关控制优先排记录，开启后经理可以维护", async () => {
     const day = "2099-02-01";
     expect((await request(app).post(base).set(manager1).send({ ...input(day, DtaRosterabilityStatus.PRIORITY_ROSTERABLE), empId: 101 })).status).toBe(403);
-    await prisma.dtaOrg.update({ where: { id: 1 }, data: { priorityRosterEnable: 1 } });
+    await prisma.dtaParamGroup.update({ where: { tenantId_orgId_empTypeCode: { tenantId: 1, orgId: 1, empTypeCode: "T004" } }, data: { priorityRosterEnable: 1 } });
     const created = await request(app).post(base).set(manager1).send({ ...input(day, DtaRosterabilityStatus.PRIORITY_ROSTERABLE), empId: 101 });
     expect(created.status).toBe(200);
     expect(created.body.data.statusCode).toBe(DtaRosterabilityStatus.PRIORITY_ROSTERABLE);
-    await prisma.dtaOrg.update({ where: { id: 1 }, data: { priorityRosterEnable: 0 } });
+    await prisma.dtaParamGroup.update({ where: { tenantId_orgId_empTypeCode: { tenantId: 1, orgId: 1, empTypeCode: "T004" } }, data: { priorityRosterEnable: 0 } });
   });
 
   it("员工只能维护本人，经理只能维护所辖组织，管理员只读", async () => {
@@ -161,7 +161,7 @@ describe("T004 可排性记录", () => {
   it("复制本周到下周逐项校验班次冲突与状态模式，复制上周逐项报告锁定", async () => {
     const org2ParamKey = { tenantId_orgId_empTypeCode: { tenantId: 1, orgId: 2, empTypeCode: "T004" } };
     await prisma.dtaParamGroup.update({ where: org2ParamKey, data: { baselineRule: DtaBaselineRule.BASE_ROSTERABLE } });
-    await prisma.dtaOrg.update({ where: { id: 2 }, data: { priorityRosterEnable: 1 } });
+    await prisma.dtaParamGroup.update({ where: org2ParamKey, data: { priorityRosterEnable: 1 } });
     const monday = hkToday(new Date());
     const weekday = new Date(`${monday}T00:00:00.000Z`).getUTCDay();
     const thisMonday = addDays(monday, -(weekday === 0 ? 6 : weekday - 1));
@@ -182,6 +182,6 @@ describe("T004 可排性记录", () => {
     expect(previous.body.data.results).toContainEqual(expect.objectContaining({ success: false, businessDate: thisMonday }));
     expect(await prisma.dtaAuditLog.count()).toBe(0);
     await prisma.dtaParamGroup.update({ where: org2ParamKey, data: { baselineRule: DtaBaselineRule.BASE_UNROSTERABLE } });
-    await prisma.dtaOrg.update({ where: { id: 2 }, data: { priorityRosterEnable: 0 } });
+    await prisma.dtaParamGroup.update({ where: org2ParamKey, data: { priorityRosterEnable: 0 } });
   });
 });

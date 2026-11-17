@@ -73,8 +73,8 @@ export async function generateForManager(orgId: number, managerId: number, now: 
           skip(employee.id, businessDate, item.id, "EXISTS", "该模板时段已生成，包括已修改或软删除的记录");
           continue;
         }
-        if (!enabledStatuses.has(item.statusCode) || item.statusCode === DtaRosterabilityStatus.STANDBY || (item.statusCode === DtaRosterabilityStatus.PRIORITY_ROSTERABLE && org.priorityRosterEnable !== 1)) {
-          skip(employee.id, businessDate, item.id, "STATUS_DISABLED", item.statusCode === DtaRosterabilityStatus.PRIORITY_ROSTERABLE ? "所属组织未启用优先排班模式" : "模板可排性状态未启用");
+        if (!enabledStatuses.has(item.statusCode) || item.statusCode === DtaRosterabilityStatus.STANDBY || (item.statusCode === DtaRosterabilityStatus.PRIORITY_ROSTERABLE && param.priorityRosterEnable !== 1)) {
+          skip(employee.id, businessDate, item.id, "STATUS_DISABLED", item.statusCode === DtaRosterabilityStatus.PRIORITY_ROSTERABLE ? "所属组织与员工类型未启用优先排班模式" : "模板可排性状态未启用");
           continue;
         }
         if (isLocked(businessDate, param.cutoffDays, now)) {

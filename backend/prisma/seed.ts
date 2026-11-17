@@ -31,6 +31,8 @@ async function main() {
     "dta_template_item",
     "dta_template",
     "dta_param_group",
+    "dta_param_scheme_rule",
+    "dta_param_scheme",
     "dta_rosterability_source_dict",
     "dta_rosterability_status_dict",
     "dta_employee",
@@ -42,8 +44,8 @@ async function main() {
 
   await prisma.dtaTenant.create({ data: { id: tenantId, tenantName: "HKJC Demo", ...by } });
 
-  const org1 = await prisma.dtaOrg.create({ data: { id: 1, tenantId, orgName: "沙田马场 · 投注服务部", priorityRosterEnable: 0, ...by } });
-  const org2 = await prisma.dtaOrg.create({ data: { id: 2, tenantId, orgName: "跑马地马场 · 客户服务部", priorityRosterEnable: 0, ...by } });
+  const org1 = await prisma.dtaOrg.create({ data: { id: 1, tenantId, orgName: "沙田马场 · 投注服务部", ...by } });
+  const org2 = await prisma.dtaOrg.create({ data: { id: 2, tenantId, orgName: "跑马地马场 · 客户服务部", ...by } });
 
   const employees = [
     { id: 1, orgId: org1.id, empName: "陈志明", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.BETTING_SERVICE },
@@ -82,13 +84,20 @@ async function main() {
     ],
   });
 
-  // 参数组：全职默认可排、只报不可排；兼职默认不可排、只报可排
+  const scheme = await prisma.dtaParamScheme.create({ data: { tenantId, schemeName: "常规报备方案", createdBy: ADMIN_USER_ID } });
+  await prisma.dtaParamSchemeRule.createMany({ data: [
+    { tenantId, schemeId: scheme.id, empTypeCode: EMP_TYPE_CODES.FULL_TIME, cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_ROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_UNROSTERABLE, empEditEnable: 1, priorityRosterEnable: 0, autoGenRangeWeek: 4 },
+    { tenantId, schemeId: scheme.id, empTypeCode: EMP_TYPE_CODES.PART_TIME, cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_UNROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_ROSTERABLE, empEditEnable: 1, priorityRosterEnable: 0, autoGenRangeWeek: 4 },
+  ] });
+  await prisma.dtaOrg.updateMany({ where: { id: { in: [org1.id, org2.id] } }, data: { paramSchemeId: scheme.id } });
+
+  // 生效参数组：全职默认可排、只报不可排；兼职默认不可排、只报可排
   for (const orgId of [org1.id, org2.id]) {
     await prisma.dtaParamGroup.create({
       data: {
         tenantId, orgId, empTypeCode: EMP_TYPE_CODES.FULL_TIME,
         cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_ROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_UNROSTERABLE,
-        empEditEnable: 1, templateAutoGenEnable: 0, autoGenRangeWeek: 4, autoGenWeekday: null, autoGenTime: null,
+        empEditEnable: 1, priorityRosterEnable: 0, templateAutoGenEnable: 0, autoGenRangeWeek: 4, autoGenWeekday: null, autoGenTime: null,
         conflictCheckMode: DtaConflictCheckMode.STRONG_BLOCK, ...by,
       },
     });
@@ -96,7 +105,7 @@ async function main() {
       data: {
         tenantId, orgId, empTypeCode: EMP_TYPE_CODES.PART_TIME,
         cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_UNROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_ROSTERABLE,
-        empEditEnable: 1, templateAutoGenEnable: 0, autoGenRangeWeek: 4, autoGenWeekday: null, autoGenTime: null,
+        empEditEnable: 1, priorityRosterEnable: 0, templateAutoGenEnable: 0, autoGenRangeWeek: 4, autoGenWeekday: null, autoGenTime: null,
         conflictCheckMode: DtaConflictCheckMode.STRONG_BLOCK, ...by,
       },
     });

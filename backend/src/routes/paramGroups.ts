@@ -21,6 +21,7 @@ function payload(body: Record<string, unknown>, current?: Record<string, unknown
     baselineRule: parseEnum(merged.baselineRule, Object.values(DtaBaselineRule), "baselineRule"),
     submitMode: parseEnum(merged.submitMode, Object.values(DtaSubmitMode), "submitMode"),
     empEditEnable: parseFlag(merged.empEditEnable, "empEditEnable"),
+    priorityRosterEnable: parseFlag(merged.priorityRosterEnable, "priorityRosterEnable", 0),
     templateAutoGenEnable: body.templateAutoGenEnable === undefined ? 0 : parseFlag(body.templateAutoGenEnable, "templateAutoGenEnable"),
     autoGenRangeWeek: merged.autoGenRangeWeek === null || merged.autoGenRangeWeek === undefined ? null : Number(merged.autoGenRangeWeek),
     autoGenWeekday: null,
@@ -62,10 +63,12 @@ paramGroupsRouter.post("/", requireRole("admin"), async (req, res, next) => {
     const data = { tenantId: TENANT_ID, ...values, createdBy: req.identity!.userId, updatedBy: req.identity!.userId };
     if (existing) {
       const restored = await prisma.dtaParamGroup.update({ where: { id: existing.id }, data: { ...values, isDeleted: 0, updatedBy: req.identity!.userId } });
+      await prisma.dtaOrg.update({ where: { id: values.orgId }, data: { paramSchemeId: null } });
       ok(res, restored, "参数组已恢复并更新");
       return;
     }
     const created = await prisma.dtaParamGroup.create({ data });
+    await prisma.dtaOrg.update({ where: { id: values.orgId }, data: { paramSchemeId: null } });
     ok(res, created, "参数组已创建");
   } catch (error) { next(error); }
 });
@@ -80,6 +83,8 @@ paramGroupsRouter.patch("/:id", requireRole("admin"), async (req, res, next) => 
     const duplicate = await prisma.dtaParamGroup.findFirst({ where: { tenantId: TENANT_ID, orgId: values.orgId, empTypeCode: values.empTypeCode, isDeleted: 0, NOT: { id } } });
     if (duplicate) throw new AppError(40900, "相同组织和员工类型的参数组已存在", 409);
     const updated = await prisma.dtaParamGroup.update({ where: { id }, data: { ...values, updatedBy: req.identity!.userId } });
+    await prisma.dtaOrg.update({ where: { id: current.orgId }, data: { paramSchemeId: null } });
+    if (values.orgId !== current.orgId) await prisma.dtaOrg.update({ where: { id: values.orgId }, data: { paramSchemeId: null } });
     ok(res, updated, "参数组已更新");
   } catch (error) { next(error); }
 });
@@ -90,6 +95,7 @@ paramGroupsRouter.delete("/:id", requireRole("admin"), async (req, res, next) =>
     const current = await prisma.dtaParamGroup.findFirst({ where: { id, tenantId: TENANT_ID, isDeleted: 0 } });
     if (!current) throw new AppError(40400, "参数组不存在", 404);
     const deleted = await prisma.dtaParamGroup.update({ where: { id }, data: { isDeleted: 1, updatedBy: req.identity!.userId } });
+    await prisma.dtaOrg.update({ where: { id: current.orgId }, data: { paramSchemeId: null } });
     ok(res, deleted, "参数组已删除");
   } catch (error) { next(error); }
 });

@@ -91,7 +91,7 @@
 | id | int | 主键自增 |
 | tenant_id | int | 租户 ID |
 | org_name | text(100) | 组织名称 |
-| priority_roster_enable | int | 是否启用优先排班模式，默认 0 |
+| param_scheme_id | int? | 当前应用的命名参数方案；人工直接维护参数组后置空 |
 | is_deleted | int | 默认 0 |
 | created_at | datetime | 创建时间 |
 | updated_at | datetime | 更新时间 |
@@ -164,6 +164,7 @@ Demo 不增加班组、职级或自定义字段。
 | baseline_rule | enum | `DtaBaselineRule` |
 | submit_mode | enum | `DtaSubmitMode` |
 | emp_edit_enable | int | 员工自主编辑开关 |
+| priority_roster_enable | int | 该组织与员工类型是否启用优先排，默认 0 |
 | template_auto_gen_enable | int | 定时生成预留；Demo 固定为 0 |
 | auto_gen_range_week | int | 经理手动生成周数，Demo 必填，1 至 12；沿用现有字段名 |
 | auto_gen_weekday | int | 定时生成预留；Demo 固定为 null |
@@ -177,6 +178,20 @@ Demo 不增加班组、职级或自定义字段。
 | created_by / updated_by | int | 创建与更新人 |
 
 唯一约束：`tenant_id + org_id + emp_type_code`。软删除后再创建相同组合时，服务层应恢复原记录而不是插入新记录。
+
+### 8.1 dta_param_scheme 命名参数方案
+
+| 字段 | 类型 | 约束与说明 |
+| --- | --- | --- |
+| id | int | 主键自增 |
+| tenant_id | int | 租户 ID |
+| scheme_name | text | 租户内唯一，最长 80 字符 |
+| source_scheme_id | int? | 复制来源，仅作来源提示，不参与运行时继承 |
+| created_at / created_by | datetime / int | 创建信息；方案创建后只读 |
+
+### 8.2 dta_param_scheme_rule 方案员工类型规则
+
+每个方案包含全部 Demo 员工类型，`scheme_id + emp_type_code` 唯一。规则字段为 `cutoff_days`、`baseline_rule`、`submit_mode`、`emp_edit_enable`、`priority_roster_enable` 与 `auto_gen_range_week`，约束与生效参数组相同。批量应用时在单个事务中写入目标组织对应的 `dta_param_group` 行，并更新组织的 `param_scheme_id`。Demo 立即生效；方案版本、预约生效与历史查询属于标准产品扩展。
 
 ## 9. dta_template 周期模板主表
 

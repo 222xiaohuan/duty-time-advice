@@ -86,7 +86,7 @@ model DtaOrg {
   id         Int      @id @default(autoincrement())
   tenantId   Int      @map("tenant_id")
   orgName    String   @map("org_name")
-  priorityRosterEnable Int @default(0) @map("priority_roster_enable") // 是否启用优先排模式
+  paramSchemeId Int? @map("param_scheme_id") // 当前应用的参数方案
   isDeleted  Int      @default(0) @map("is_deleted")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
@@ -165,6 +165,7 @@ model DtaParamGroup {
   baselineRule          DtaBaselineRule      @map("baseline_rule")
   submitMode            DtaSubmitMode        @map("submit_mode")
   empEditEnable         Int                  @map("emp_edit_enable")
+  priorityRosterEnable  Int                  @default(0) @map("priority_roster_enable") // 按组织与员工类型启用优先排
   templateAutoGenEnable Int                  @map("template_auto_gen_enable") // Demo 固定 0；定时生成预留
   autoGenRangeWeek      Int?                 @map("auto_gen_range_week") // Demo 必填 1 至 12，手动生成周数
   autoGenWeekday        Int?                 @map("auto_gen_weekday") // Demo 固定 null；定时生成预留
@@ -181,6 +182,34 @@ model DtaParamGroup {
 
   @@unique([tenantId, orgId, empTypeCode])
   @@map("dta_param_group")
+}
+
+model DtaParamScheme {
+  id             Int      @id @default(autoincrement())
+  tenantId       Int      @map("tenant_id")
+  schemeName     String   @map("scheme_name")
+  sourceSchemeId Int?     @map("source_scheme_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+  createdBy      Int      @map("created_by")
+
+  @@unique([tenantId, schemeName])
+  @@map("dta_param_scheme")
+}
+
+model DtaParamSchemeRule {
+  id                   Int             @id @default(autoincrement())
+  tenantId             Int             @map("tenant_id")
+  schemeId             Int             @map("scheme_id")
+  empTypeCode          String          @map("emp_type_code")
+  cutoffDays           Int             @map("cutoff_days")
+  baselineRule         DtaBaselineRule @map("baseline_rule")
+  submitMode           DtaSubmitMode   @map("submit_mode")
+  empEditEnable        Int             @map("emp_edit_enable")
+  priorityRosterEnable Int             @map("priority_roster_enable")
+  autoGenRangeWeek     Int             @map("auto_gen_range_week")
+
+  @@unique([schemeId, empTypeCode])
+  @@map("dta_param_scheme_rule")
 }
 
 // ===================== 周期模板 =====================

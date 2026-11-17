@@ -7,8 +7,8 @@ import { RosterabilityStatus } from "@/lib/enums";
 import type { MockProfile } from "@/lib/identity";
 import { addDays, hkDate, hkTime, hkToday, mondayOf, shortDay } from "@/lib/week";
 
-type Employee = { id: number; empName: string; empTypeCode: string; postCode: string };
-type Directory = { orgId: number; orgName: string; priorityRosterEnable: number; employees: Employee[] };
+type Employee = { id: number; empName: string; empTypeCode: string; postCode: string; priorityRosterEnable: number };
+type Directory = { orgId: number; orgName: string; employees: Employee[] };
 type RecordRow = { id: number; empId: number; businessDate: string; statusCode: string; startTime: string; endTime: string };
 type ShiftRow = { id: number; empId: number; businessDate: string; shiftName: string; startTime: string; endTime: string; durationMinutes: number };
 type Selection = { empId: number; day: string };
@@ -55,7 +55,7 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
   const markerRecord = records.find((row) => row.id === selectedMarker?.id);
   const markerEmployee = directory?.employees.find((employee) => employee.id === markerRecord?.empId);
   const markerStatus = statuses.find((status) => status.statusCode === markerRecord?.statusCode);
-  const activeStatuses = statuses.filter((status) => status.enabled === 1 && (status.statusCode === RosterabilityStatus.ROSTERABLE || status.statusCode === RosterabilityStatus.UNROSTERABLE || (status.statusCode === RosterabilityStatus.PRIORITY_ROSTERABLE && directory?.priorityRosterEnable === 1)));
+  const activeStatuses = statuses.filter((status) => status.enabled === 1 && (status.statusCode === RosterabilityStatus.ROSTERABLE || status.statusCode === RosterabilityStatus.UNROSTERABLE || (status.statusCode === RosterabilityStatus.PRIORITY_ROSTERABLE && directory?.employees.some((employee) => employee.priorityRosterEnable === 1))));
 
   useEffect(() => {
     let active = true;

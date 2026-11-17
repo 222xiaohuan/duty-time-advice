@@ -31,10 +31,10 @@ describe("T009 本人有效提报参数", () => {
     expect(res.body.data).toMatchObject({ empId: 301, orgId: 6, cutoffDays: 3, submitMode: "MODE_ONLY_ROSTERABLE", allowedStatuses: [{ statusCode: "ROSTERABLE" }] });
     expect(res.body.data).not.toHaveProperty("autoGenRangeWeek");
     await prisma.dtaRosterabilityStatusDict.upsert({ where: { tenantId_statusCode: { tenantId: 1, statusCode: DtaRosterabilityStatus.PRIORITY_ROSTERABLE } }, update: { enabled: 1, empSelfEdit: 1 }, create: { tenantId: 1, statusCode: DtaRosterabilityStatus.PRIORITY_ROSTERABLE, statusName: "优先排", colorHex: "#2e8b57", allowSchedule: 1, enabled: 1, empSelfEdit: 1, ...by } });
-    await prisma.dtaOrg.update({ where: { id: 6 }, data: { priorityRosterEnable: 1 } });
+    await prisma.dtaParamGroup.update({ where: { tenantId_orgId_empTypeCode: { tenantId: 1, orgId: 6, empTypeCode: "PART_TIME" } }, data: { priorityRosterEnable: 1 } });
     const priority = await request(app).get("/api/me/rosterability-config").set(employee);
     expect(priority.body.data.allowedStatuses.map((status: { statusCode: string }) => status.statusCode)).toEqual(["ROSTERABLE", "PRIORITY_ROSTERABLE"]);
-    await prisma.dtaOrg.update({ where: { id: 6 }, data: { priorityRosterEnable: 0 } });
+    await prisma.dtaParamGroup.update({ where: { tenantId_orgId_empTypeCode: { tenantId: 1, orgId: 6, empTypeCode: "PART_TIME" } }, data: { priorityRosterEnable: 0 } });
     await prisma.dtaParamGroup.update({ where: { tenantId_orgId_empTypeCode: { tenantId: 1, orgId: 6, empTypeCode: "PART_TIME" } }, data: { submitMode: DtaSubmitMode.MODE_NO_SUBMIT, empEditEnable: 0 } });
     const closed = await request(app).get("/api/me/rosterability-config").set(employee);
     expect(closed.body.data).toMatchObject({ empEditEnable: 0, allowedStatuses: [] });
