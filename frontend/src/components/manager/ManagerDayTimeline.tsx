@@ -173,7 +173,7 @@ export function ManagerDayTimeline({ day, days, employees, records, shifts, stat
         const dayShifts = segmentsFor(shifts.filter((row) => row.empId === employee.id), rowDay, true);
         const lanes = Math.max(1, ...dayRecords.map((segment) => segment.lane + 1));
         return <div className="manager-day-grid-row" key={`${employee.id}-${rowDay}`}>
-          <div className={`manager-day-person ${days ? "week-date" : ""}`}>
+          <div className={`manager-day-person ${days ? "week-date" : ""} ${locked ? "locked" : ""}`}>
             {days ? <><strong>{rowDay}<span>{dateWeekdays[new Date(`${rowDay}T00:00:00Z`).getUTCDay()]}</span></strong>{locked && <small>只读</small>}</> : <><strong>{employee.empName}</strong><small>{locked ? "只读" : `${labelOf(employeeTypes, employee.empTypeCode)} · ${labelOf(posts, employee.postCode)}`}</small></>}
             <Button type="button" variant="ghost" size="icon" title={`为${employee.empName}在${rowDay}新增时段`} aria-label={`为${employee.empName}在${rowDay}新增时段`} disabled={locked || !statusCode} onClick={() => openNew(employee, rowDay)}><Plus size={15} /></Button>
           </div>
