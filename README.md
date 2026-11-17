@@ -6,7 +6,7 @@
 ## 核心口径
 
 - 英文业务名词统一使用 `Rosterability`。
-- 核心状态为 `ROSTERABLE` 可排和 `UNROSTERABLE` 不可排；`STANDBY` 仅作正式产品预留。
+- 核心状态为 `ROSTERABLE` 可排、`UNROSTERABLE` 不可排和 `PRIORITY_ROSTERABLE` 优先排；`STANDBY` 仅作正式产品预留。
 - `locked` 是截止后的只读标记，不覆盖原有可排性状态。
 - 跨午夜时段归属开始日期。
 - 周期模板按周一至周日配置；经理点击生成按钮后，按参数与员工匹配的模板生成未来 1 至 12 周记录。
@@ -43,7 +43,7 @@ Demo 不实现：
 - 页面主色：`#0C336A`。
 - 菜单归属：排班管理 > 排班时间报备。
 - 仅浅色模式，复用主系统的表格、弹窗、筛选和分页样式。
-- 业务色：`ROSTERABLE #228B22`、`UNROSTERABLE #dc2626`、`STANDBY #f59e0b`（预留），锁定使用灰色只读视觉。
+- 业务色：`ROSTERABLE #4a90e2`、`UNROSTERABLE #a9a9a9`、`PRIORITY_ROSTERABLE #2e8b57`；锁定另用只读视觉标记。
 
 ## 本地数据库
 
@@ -51,7 +51,15 @@ Demo 使用 SQLite，数据文件为 `backend/prisma/dev.db`，不入版本库�
 
 ## 本地运行
 
-后端在 `backend/` 执行 `npm install`、`npm run dev`，默认监听 `http://localhost:3001`。前端在 `frontend/` 执行 `npm install`、`npm run dev`，打开 `http://localhost:5173`；Vite 将 `/api` 代理到后端。前端可通过 `VITE_API_BASE_URL` 指定其他后端地址。当前前端仅包含 T007 应用框架、角色切换和通用日历容器，业务页面在 T008–T010 实现。
+后端在 `backend/` 执行 `npm install`、`npm run dev`，默认监听 `http://localhost:3001`。前端在 `frontend/` 执行 `npm install`、`npm run dev`，打开 `http://localhost:5173`；Vite 将 `/api` 代理到后端。前端可通过 `VITE_API_BASE_URL` 指定其他后端地址。
+
+## 组织参数方案操作
+
+管理员切换到“组织参数”后，在“组织应用”页选择一个或多个组织，并在“应用方案”下拉框中选择参数方案。页面下方显示每个选中组织全职、兼职规则的变化；核对后点击“应用到 N 个组织”并确认，配置立即生效。搜索框可缩小组织列表，表头复选框选中当前筛选结果。
+
+更换方案使用同样步骤：选中已绑定组织、改选另一个方案、核对变化后应用。方案创建后只读；需要微调时转到“参数方案”页，点击“复制为新方案”，分别修改员工类型规则并创建，再回“组织应用”分配新方案。未重新分配的组织保持原方案。
+
+种子提供 2 个已有参数与员工的组织，以及 8 个未绑定方案、无员工的组织。后者用于练习首次绑定和更换方案；它们在应用方案前显示“未配置”。本地 `dev.db` 不入版本库，重新运行种子会重置演示数据。
 
 ## 继续开发指令
 

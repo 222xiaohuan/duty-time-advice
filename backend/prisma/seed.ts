@@ -1,6 +1,6 @@
 /**
  * Demo 种子数据（T001）。仅用于本地 SQLite，执行时清空 dta_ 表后重新写入。
- * 包含：租户、2 个组织、全职/兼职员工与岗位、状态字典、来源字典、参数组、模拟班次。
+ * 包含：租户、2 个有员工及参数的组织、8 个未配置组织、状态与来源字典、模拟班次。
  * 不包含：周期模板（T003/T012 补充）、日期标签、导入任务。
  */
 import { createPrismaClient } from "../src/lib/prisma";
@@ -46,6 +46,16 @@ async function main() {
 
   const org1 = await prisma.dtaOrg.create({ data: { id: 1, tenantId, orgName: "沙田马场 · 投注服务部", ...by } });
   const org2 = await prisma.dtaOrg.create({ data: { id: 2, tenantId, orgName: "跑马地马场 · 客户服务部", ...by } });
+  await prisma.dtaOrg.createMany({ data: [
+    { id: 3, orgName: "沙田马场 · 客户服务部" },
+    { id: 4, orgName: "沙田马场 · 场地运营部" },
+    { id: 5, orgName: "沙田马场 · 人流管理部" },
+    { id: 6, orgName: "跑马地马场 · 投注服务部" },
+    { id: 7, orgName: "跑马地马场 · 场地运营部" },
+    { id: 8, orgName: "跑马地马场 · 人流管理部" },
+    { id: 9, orgName: "总部 · 客户支持部" },
+    { id: 10, orgName: "总部 · 活动协调部" },
+  ].map((org) => ({ ...org, tenantId, ...by })) });
 
   const employees = [
     { id: 1, orgId: org1.id, empName: "陈志明", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.BETTING_SERVICE },
