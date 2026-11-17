@@ -17,6 +17,7 @@ type Drag = { pointerId: number; empId: number; day: string; start: number; end:
 
 const hours = Array.from({ length: 13 }, (_, index) => index * 2);
 const dateWeekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
+const lockedCopy = "无法修改今天及过去日期的可排时间";
 const defaultColor = (code: string) => code === "ROSTERABLE" ? "#228b22" : "#dc2626";
 const minuteOf = (iso: string) => { const [hour, minute] = hkTime(iso).split(":").map(Number); return hour * 60 + minute; };
 const timeOf = (minute: number) => minute === 1440 ? "00:00" : `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
@@ -174,7 +175,7 @@ export function ManagerDayTimeline({ day, days, employees, records, shifts, stat
         const lanes = Math.max(1, ...dayRecords.map((segment) => segment.lane + 1));
         return <div className="manager-day-grid-row" key={`${employee.id}-${rowDay}`}>
           <div className={`manager-day-person ${days ? "week-date" : ""} ${locked ? "locked" : ""}`}>
-            {days ? <><strong>{rowDay}<span>{dateWeekdays[new Date(`${rowDay}T00:00:00Z`).getUTCDay()]}</span></strong>{locked && <small>只读</small>}</> : <><strong>{employee.empName}</strong><small>{locked ? "只读" : `${labelOf(employeeTypes, employee.empTypeCode)} · ${labelOf(posts, employee.postCode)}`}</small></>}
+            {days ? <><strong>{rowDay}<span>{dateWeekdays[new Date(`${rowDay}T00:00:00Z`).getUTCDay()]}</span></strong>{locked && <small>{lockedCopy}</small>}</> : <><strong>{employee.empName}</strong><small>{locked ? lockedCopy : `${labelOf(employeeTypes, employee.empTypeCode)} · ${labelOf(posts, employee.postCode)}`}</small></>}
             <Button type="button" variant="ghost" size="icon" title={`为${employee.empName}在${rowDay}新增时段`} aria-label={`为${employee.empName}在${rowDay}新增时段`} disabled={locked || !statusCode} onClick={() => openNew(employee, rowDay)}><Plus size={15} /></Button>
           </div>
           <div className={`manager-day-row-body ${locked ? "locked" : ""}`}>
@@ -197,7 +198,7 @@ export function ManagerDayTimeline({ day, days, employees, records, shifts, stat
       <div className="manager-day-dialog" ref={dialogRef} role="dialog" aria-modal="true" aria-label={`${dialog.employee.empName} ${dialog.row ? "编辑" : "新增"}可排性时段`}>
         <div className="manager-day-dialog-head"><div><h2>{dialog.employee.empName} · {dialog.row?.businessDate ?? dialog.day}</h2><span>{dialog.row ? "编辑可排性时段" : "新增可排性时段"}</span></div><Button type="button" variant="ghost" size="icon" title="关闭" aria-label="关闭编辑面板" disabled={busy} onClick={() => setDialog(null)}><X size={17} /></Button></div>
         {dialog.row && <p className="manager-day-source">来源：{sources.find((source) => source.sourceCode === dialog.row?.sourceCode)?.sourceName ?? dialog.row.sourceCode}</p>}
-        {readOnly && <p className="employee-readonly">该记录已锁定或来源只读</p>}
+        {readOnly && <p className="employee-readonly">{dialog.row?.locked || dayLocked(dialog.row?.businessDate ?? dialog.day, dialog.employee.cutoffDays ?? 30) ? lockedCopy : "该记录来源只读"}</p>}
         <form onSubmit={save} className="manager-day-dialog-form">
           <label>可排性状态<select name="statusCode" value={form.statusCode} disabled={readOnly || busy} onChange={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, statusCode: value })); }}>{form.statusCode && !activeStatuses.some((status) => status.statusCode === form.statusCode) && <option value={form.statusCode}>{form.statusCode}</option>}{activeStatuses.map((status) => <option key={status.statusCode} value={status.statusCode}>{status.statusName}</option>)}</select></label>
           <fieldset className="manager-day-pattern"><legend>时间模式</legend><label><input type="radio" name="timePattern" checked={!form.allDay} disabled={readOnly || busy} onChange={() => setForm((current) => ({ ...current, allDay: false }))} />时段</label><label><input type="radio" name="timePattern" checked={form.allDay} disabled={readOnly || busy} onChange={() => setForm((current) => ({ ...current, allDay: true }))} />全天</label></fieldset>
