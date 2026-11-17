@@ -1,6 +1,7 @@
 export const RosterabilityStatus = {
   ROSTERABLE: "ROSTERABLE",
   UNROSTERABLE: "UNROSTERABLE",
+  PRIORITY_ROSTERABLE: "PRIORITY_ROSTERABLE",
   STANDBY: "STANDBY",
 } as const;
 

@@ -11,6 +11,7 @@ import { managerEmployeesRouter } from "./routes/managerEmployees";
 import { templatesRouter } from "./routes/templates";
 import { templateGenerationRouter } from "./routes/templateGeneration";
 import { rosterabilityRecordsRouter } from "./routes/rosterabilityRecords";
+import { orgsRouter } from "./routes/orgs";
 
 export function createApp(): Express {
   const app = express();
@@ -30,6 +31,7 @@ export function createApp(): Express {
   app.use("/api/templates", templatesRouter);
   app.use("/api/template-generation", templateGenerationRouter);
   app.use("/api/rosterability-records", rosterabilityRecordsRouter);
+  app.use("/api/orgs", orgsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

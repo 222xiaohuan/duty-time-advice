@@ -40,7 +40,7 @@ describe("T003 模板维护与经理生成", () => {
   let templateId: number;
   let itemId: number;
 
-  it("管理员维护模板、跨午夜明细和条件；其他角色不能修改", async () => {
+  it("管理员和主管可维护模板、跨午夜明细和条件；员工不能访问", async () => {
     const created = await request(app).post("/api/templates").set(admin).send({ templateName: "夜班模板", startDate: "2026-01-01", enabled: 1 });
     expect(created.status).toBe(200);
     templateId = created.body.data.id;
@@ -54,7 +54,12 @@ describe("T003 模板维护与经理生成", () => {
     const read = await request(app).get(`/api/templates/${templateId}`).set(admin);
     expect(read.body.data.items).toHaveLength(2);
     expect(read.body.data.conditions).toHaveLength(1);
-    expect((await request(app).patch(`/api/templates/${templateId}`).set(manager1).send({ enabled: 0 })).status).toBe(403);
+    const managerUpdate = await request(app).patch(`/api/templates/${templateId}`).set(manager1).send({ enabled: 0 });
+    expect(managerUpdate.status).toBe(200);
+    expect(managerUpdate.body.data.enabled).toBe(0);
+    expect((await request(app).get(`/api/templates/${templateId}`).set(manager1)).status).toBe(200);
+    expect((await request(app).patch(`/api/templates/${templateId}`).set(manager1).send({ enabled: 1 })).status).toBe(200);
+    expect((await request(app).get("/api/templates").set({ "x-mock-role": "employee", "x-mock-user-id": "101" })).status).toBe(403);
     expect((await request(app).post(`/api/templates/${templateId}/items`).set(admin).send({ weekday: 1, statusCode: "STANDBY", startTime: "10:00", endTime: "11:00" })).status).toBe(400);
   });
 
@@ -93,7 +98,7 @@ describe("T003 模板维护与经理生成", () => {
     await request(app).post(`/api/templates/${secondId}/items`).set(admin).send({ weekday: 2, statusCode: "ROSTERABLE", startTime: "09:00", endTime: "10:00", endDayOffset: 0 });
     await request(app).post(`/api/templates/${secondId}/conditions`).set(admin).send({ priority: 2, orgId: 1 });
     const tuesday = await request(app).post(`/api/templates/${templateId}/items`).set(admin).send({ weekday: 2, statusCode: "ROSTERABLE", startTime: "11:00", endTime: "12:00", endDayOffset: 0 });
-    await prisma.dtaParamGroup.update({ where: { tenantId_orgId_empTypeCode: { tenantId: 1, orgId: 1, empTypeCode: "FULL_TIME" } }, data: { cutoffDays: 2 } });
+    await prisma.dtaParamGroup.update({ where: { tenantId_orgId_empTypeCode: { tenantId: 1, orgId: 1, empTypeCode: "FULL_TIME" } }, data: { cutoffDays: 3 } });
     const result = await generateForManager(1, 9101, now);
     expect(result.skipped).toContainEqual(expect.objectContaining({ businessDate: "2026-11-17", templateItemId: tuesday.body.data.id, reason: "LOCKED" }));
     expect(await prisma.dtaRosterabilityRecord.count({ where: { templateId: secondId, empId: 1 } })).toBe(0);

@@ -1,13 +1,15 @@
 import { useEffect, useRef, useState, type FormEvent, type PointerEvent } from "react";
-import { Plus, Save, Trash2, X } from "lucide-react";
+import { LockKeyhole, Plus, Save, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiDelete, apiPatch, apiPost, type SourceDictionaryItem, type StatusDictionaryItem } from "@/lib/api";
 import { employeeTypes, errorText, labelOf, posts } from "@/lib/admin";
+import { RosterabilityStatus } from "@/lib/enums";
 import { BaselineRule } from "@/lib/enums";
 import type { MockProfile } from "@/lib/identity";
-import { dayLocked, hkDate, hkTime } from "@/lib/week";
+import { baselineStatusMessage } from "@/lib/rosterability";
+import { dayLocked, hkDate, hkTime, hkToday, managerLockMessage } from "@/lib/week";
 
-export type TimelineEmployee = { id: number; empName: string; empTypeCode: string; postCode: string; cutoffDays: number | null; baselineRule: string | null };
+export type TimelineEmployee = { id: number; empName: string; empTypeCode: string; postCode: string; cutoffDays: number | null; baselineRule: string | null; priorityRosterEnable: number };
 export type TimelineRecord = { id: number; empId: number; businessDate: string; statusCode: string; sourceCode: string; startTime: string; endTime: string; remark: string | null; locked: number };
 export type TimelineShift = { id: number; empId: number; businessDate: string; shiftName: string; startTime: string; endTime: string; durationMinutes: number };
 type Form = { statusCode: string; allDay: boolean; startTime: string; endTime: string; endDayOffset: number; remark: string };
@@ -17,8 +19,7 @@ type Drag = { pointerId: number; empId: number; day: string; start: number; end:
 
 const hours = Array.from({ length: 13 }, (_, index) => index * 2);
 const dateWeekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
-const lockedCopy = "无法修改今天及过去日期的可排时间";
-const defaultColor = (code: string) => code === "ROSTERABLE" ? "#228b22" : "#dc2626";
+const defaultColor = (code: string) => code === RosterabilityStatus.ROSTERABLE ? "#4a90e2" : code === RosterabilityStatus.PRIORITY_ROSTERABLE ? "#2e8b57" : "#a9a9a9";
 const minuteOf = (iso: string) => { const [hour, minute] = hkTime(iso).split(":").map(Number); return hour * 60 + minute; };
 const timeOf = (minute: number) => minute === 1440 ? "00:00" : `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
 const position = (start: number, end: number) => ({ left: `${start / 1440 * 100}%`, width: `${(end - start) / 1440 * 100}%` });
@@ -55,7 +56,8 @@ export function ManagerDayTimeline({ day, days, employees, records, shifts, stat
   chosenStatus: string; onStatusChange: (statusCode: string) => void; onChanged: (message: string) => void;
   addRequest?: { empId: number; day: string } | null; onAddRequestHandled?: () => void;
 }) {
-  const activeStatuses = statuses.filter((status) => status.enabled === 1 && (status.statusCode === "ROSTERABLE" || status.statusCode === "UNROSTERABLE"));
+  const priorityEnabled = employees[0]?.priorityRosterEnable === 1;
+  const activeStatuses = statuses.filter((status) => status.enabled === 1 && (status.statusCode === RosterabilityStatus.ROSTERABLE || status.statusCode === RosterabilityStatus.UNROSTERABLE || (status.statusCode === RosterabilityStatus.PRIORITY_ROSTERABLE && priorityEnabled)));
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [form, setForm] = useState<Form>({ statusCode: "ROSTERABLE", allDay: false, startTime: "09:00", endTime: "17:00", endDayOffset: 0, remark: "" });
   const [drag, setDrag] = useState<Drag | null>(null);
@@ -64,7 +66,9 @@ export function ManagerDayTimeline({ day, days, employees, records, shifts, stat
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const statusCode = activeStatuses.some((status) => status.statusCode === chosenStatus) ? chosenStatus : activeStatuses[0]?.statusCode ?? "";
+  const dialogBaselineMessage = dialog ? baselineStatusMessage(dialog.employee.baselineRule, form.statusCode) : null;
   const rows = days ? employees[0] ? days.map((rowDay) => ({ employee: employees[0], day: rowDay })) : [] : employees.map((employee) => ({ employee, day }));
+  const today = hkToday();
 
   useEffect(() => {
     if (!dialog) return;
@@ -131,6 +135,8 @@ export function ManagerDayTimeline({ day, days, employees, records, shifts, stat
     event.preventDefault();
     if (!dialog || readOnly || busy) return;
     const values = new FormData(event.currentTarget);
+    const warning = baselineStatusMessage(dialog.employee.baselineRule, String(values.get("statusCode")));
+    if (warning) { setError(warning); return; }
     const body = {
       empId: dialog.employee.id, businessDate: dialog.row?.businessDate ?? dialog.day,
       statusCode: String(values.get("statusCode")), startTime: form.allDay ? "00:00" : String(values.get("startTime")),
@@ -168,19 +174,22 @@ export function ManagerDayTimeline({ day, days, employees, records, shifts, stat
       </div>
       {rows.map(({ employee, day: rowDay }) => {
         const locked = employee.cutoffDays === null || dayLocked(rowDay, employee.cutoffDays);
+        const lockKind = rowDay < today ? "past" : employee.cutoffDays !== null && dayLocked(rowDay, employee.cutoffDays) ? "cutoff" : locked ? "unknown" : null;
         const baseline = employee.baselineRule === BaselineRule.BASE_ROSTERABLE ? "rosterable" : employee.baselineRule === BaselineRule.BASE_UNROSTERABLE ? "unrosterable" : null;
         const baselineText = baseline === "rosterable" ? "默认全部可排" : baseline === "unrosterable" ? "默认全部不可排" : null;
+        const lockMessage = locked ? managerLockMessage(rowDay, employee.cutoffDays) ?? "暂无可排性参数" : null;
+        const trackLabel = lockMessage ?? baselineText;
         const dayRecords = segmentsFor(records.filter((row) => row.empId === employee.id), rowDay);
         const dayShifts = segmentsFor(shifts.filter((row) => row.empId === employee.id), rowDay, true);
         const lanes = Math.max(1, ...dayRecords.map((segment) => segment.lane + 1));
         return <div className="manager-day-grid-row" key={`${employee.id}-${rowDay}`}>
-          <div className={`manager-day-person ${days ? "week-date" : ""} ${locked ? "locked" : ""}`}>
-            {days ? <><strong>{rowDay}<span>{dateWeekdays[new Date(`${rowDay}T00:00:00Z`).getUTCDay()]}</span></strong>{locked && <small>{lockedCopy}</small>}</> : <><strong>{employee.empName}</strong><small>{locked ? lockedCopy : `${labelOf(employeeTypes, employee.empTypeCode)} · ${labelOf(posts, employee.postCode)}`}</small></>}
+          <div className={`manager-day-person ${days ? "week-date" : ""} ${locked ? "locked" : ""} ${lockKind ? `locked-${lockKind}` : ""}`}>
+            {days ? <><strong>{rowDay}<span>{dateWeekdays[new Date(`${rowDay}T00:00:00Z`).getUTCDay()]}</span></strong></> : <><strong>{employee.empName}</strong><small>{`${labelOf(employeeTypes, employee.empTypeCode)} · ${labelOf(posts, employee.postCode)}`}</small></>}
             <Button type="button" variant="ghost" size="icon" title={`为${employee.empName}在${rowDay}新增时段`} aria-label={`为${employee.empName}在${rowDay}新增时段`} disabled={locked || !statusCode} onClick={() => openNew(employee, rowDay)}><Plus size={15} /></Button>
           </div>
-          <div className={`manager-day-row-body ${locked ? "locked" : ""}`}>
-            <div className={`manager-day-track ${baseline ? `baseline-${baseline}` : ""}`} style={{ height: `${Math.max(54, lanes * 30 + 24)}px` }} onPointerDown={(event) => pointerDown(event, employee, rowDay)} onPointerMove={pointerMove} onPointerUp={(event) => pointerUp(event, employee, rowDay)} onPointerCancel={() => { dragRef.current = null; setDrag(null); }} aria-label={`${employee.empName} ${rowDay} 时间轴${baselineText ? `，${baselineText}` : ""}`}>
-              {baselineText && <span className="manager-day-baseline-mark" aria-hidden="true">{baselineText}</span>}
+          <div className={`manager-day-row-body ${locked ? "locked" : ""} ${lockKind ? `locked-${lockKind}` : ""}`}>
+            <div className={`manager-day-track ${baseline ? `baseline-${baseline}` : ""} ${lockKind ? `locked-${lockKind}` : ""}`} style={{ height: `${Math.max(54, lanes * 30 + 24)}px` }} onPointerDown={(event) => pointerDown(event, employee, rowDay)} onPointerMove={pointerMove} onPointerUp={(event) => pointerUp(event, employee, rowDay)} onPointerCancel={() => { dragRef.current = null; setDrag(null); }} aria-label={`${employee.empName} ${rowDay} 时间轴${baselineText ? `，${baselineText}` : ""}`}>
+              {trackLabel && <span className="manager-day-baseline-mark" aria-hidden="true">{lockKind === "cutoff" && <LockKeyhole className="manager-day-lock-icon" size={12} strokeWidth={2.2} />}{trackLabel}</span>}
               {dayRecords.map(({ item, start, end, lane, continued }) => {
                 const status = statuses.find((value) => value.statusCode === item.statusCode);
                 const color = status?.colorHex ?? defaultColor(item.statusCode);
@@ -198,7 +207,7 @@ export function ManagerDayTimeline({ day, days, employees, records, shifts, stat
       <div className="manager-day-dialog" ref={dialogRef} role="dialog" aria-modal="true" aria-label={`${dialog.employee.empName} ${dialog.row ? "编辑" : "新增"}可排性时段`}>
         <div className="manager-day-dialog-head"><div><h2>{dialog.employee.empName} · {dialog.row?.businessDate ?? dialog.day}</h2><span>{dialog.row ? "编辑可排性时段" : "新增可排性时段"}</span></div><Button type="button" variant="ghost" size="icon" title="关闭" aria-label="关闭编辑面板" disabled={busy} onClick={() => setDialog(null)}><X size={17} /></Button></div>
         {dialog.row && <p className="manager-day-source">来源：{sources.find((source) => source.sourceCode === dialog.row?.sourceCode)?.sourceName ?? dialog.row.sourceCode}</p>}
-        {readOnly && <p className="employee-readonly">{dialog.row?.locked || dayLocked(dialog.row?.businessDate ?? dialog.day, dialog.employee.cutoffDays ?? 30) ? lockedCopy : "该记录来源只读"}</p>}
+        {readOnly && <p className="employee-readonly">{(() => { const lockMessage = managerLockMessage(dialog.row?.businessDate ?? dialog.day, dialog.employee.cutoffDays); return dialog.row?.locked || lockMessage ? lockMessage ?? "已提前锁定可排时间" : "该记录来源只读"; })()}</p>}
         <form onSubmit={save} className="manager-day-dialog-form">
           <label>可排性状态<select name="statusCode" value={form.statusCode} disabled={readOnly || busy} onChange={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, statusCode: value })); }}>{form.statusCode && !activeStatuses.some((status) => status.statusCode === form.statusCode) && <option value={form.statusCode}>{form.statusCode}</option>}{activeStatuses.map((status) => <option key={status.statusCode} value={status.statusCode}>{status.statusName}</option>)}</select></label>
           <fieldset className="manager-day-pattern"><legend>时间模式</legend><label><input type="radio" name="timePattern" checked={!form.allDay} disabled={readOnly || busy} onChange={() => setForm((current) => ({ ...current, allDay: false }))} />时段</label><label><input type="radio" name="timePattern" checked={form.allDay} disabled={readOnly || busy} onChange={() => setForm((current) => ({ ...current, allDay: true }))} />全天</label></fieldset>
@@ -208,8 +217,8 @@ export function ManagerDayTimeline({ day, days, employees, records, shifts, stat
           </div>
           <label>结束日期<select name="endDayOffset" value={form.allDay ? 1 : form.endDayOffset} disabled={readOnly || busy || form.allDay} onChange={(event) => { const value = Number(event.currentTarget.value); setForm((current) => ({ ...current, endDayOffset: value })); }}><option value={0}>当天</option><option value={1}>次日（跨午夜）</option></select></label>
           <label>备注<textarea name="remark" maxLength={500} rows={3} value={form.remark} disabled={readOnly || busy} onChange={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, remark: value })); }} /></label>
-          {error && <p className="form-error" role="alert">{error}</p>}
-          <div className="manager-day-dialog-actions">{dialog.row && !readOnly && <Button type="button" variant="outline" disabled={busy} onClick={() => void remove()}><Trash2 size={15} />删除</Button>}<Button type="button" variant="outline" disabled={busy} onClick={() => setDialog(null)}>取消</Button>{!readOnly && <Button type="submit" disabled={busy || !activeStatuses.some((status) => status.statusCode === form.statusCode)}><Save size={15} />确认</Button>}</div>
+          {dialogBaselineMessage && <p className="form-error" role="alert">{dialogBaselineMessage}</p>}{error && <p className="form-error" role="alert">{error}</p>}
+          <div className="manager-day-dialog-actions">{dialog.row && !readOnly && <Button type="button" variant="outline" disabled={busy} onClick={() => void remove()}><Trash2 size={15} />删除</Button>}<Button type="button" variant="outline" disabled={busy} onClick={() => setDialog(null)}>取消</Button>{!readOnly && <Button type="submit" disabled={busy || Boolean(dialogBaselineMessage) || !activeStatuses.some((status) => status.statusCode === form.statusCode)}><Save size={15} />确认</Button>}</div>
         </form>
       </div>
     </div>}

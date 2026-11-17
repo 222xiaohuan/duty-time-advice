@@ -1,8 +1,8 @@
-import { DateTime } from "luxon";
 import { prisma } from "./prisma";
 import { addDays, hkDateTime, hkNow } from "./time";
+import { isLocked } from "./rosterabilityRecords";
 import { bad, TENANT_ID } from "./validation";
-import { BUSINESS_TIME_ZONE, DtaRosterabilityStatus, DtaSourceCode } from "../types/enums";
+import { DtaRosterabilityStatus, DtaSourceCode } from "../types/enums";
 
 type Employee = { id: number; orgId: number; empTypeCode: string; postCode: string };
 type Template = Awaited<ReturnType<typeof prisma.dtaTemplate.findMany>>[number];
@@ -73,12 +73,11 @@ export async function generateForManager(orgId: number, managerId: number, now: 
           skip(employee.id, businessDate, item.id, "EXISTS", "该模板时段已生成，包括已修改或软删除的记录");
           continue;
         }
-        if (!enabledStatuses.has(item.statusCode) || item.statusCode === DtaRosterabilityStatus.STANDBY) {
-          skip(employee.id, businessDate, item.id, "STATUS_DISABLED", "模板可排性状态未启用");
+        if (!enabledStatuses.has(item.statusCode) || item.statusCode === DtaRosterabilityStatus.STANDBY || (item.statusCode === DtaRosterabilityStatus.PRIORITY_ROSTERABLE && org.priorityRosterEnable !== 1)) {
+          skip(employee.id, businessDate, item.id, "STATUS_DISABLED", item.statusCode === DtaRosterabilityStatus.PRIORITY_ROSTERABLE ? "所属组织未启用优先排班模式" : "模板可排性状态未启用");
           continue;
         }
-        const lockAt = DateTime.fromISO(`${businessDate}T00:00`, { zone: BUSINESS_TIME_ZONE }).minus({ days: param.cutoffDays }).toJSDate();
-        if (now >= lockAt) {
+        if (isLocked(businessDate, param.cutoffDays, now)) {
           skip(employee.id, businessDate, item.id, "LOCKED", "该业务日已到报备截止时间");
           continue;
         }

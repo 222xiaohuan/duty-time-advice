@@ -42,14 +42,14 @@ async function checkConditionOrg(orgId: number | null): Promise<void> {
   if (!org) bad("模板条件中的组织不存在");
 }
 
-templatesRouter.get("/", requireRole("admin"), async (_req, res, next) => {
+templatesRouter.get("/", requireRole("admin", "manager"), async (_req, res, next) => {
   try {
     const rows = await prisma.dtaTemplate.findMany({ where: { tenantId: TENANT_ID, isDeleted: 0 }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }] });
     ok(res, rows);
   } catch (error) { next(error); }
 });
 
-templatesRouter.get("/:id", requireRole("admin"), async (req, res, next) => {
+templatesRouter.get("/:id", requireRole("admin", "manager"), async (req, res, next) => {
   try {
     const template = await templateOf(parseId(req.params.id, "id"));
     const [items, conditions] = await Promise.all([
@@ -60,7 +60,7 @@ templatesRouter.get("/:id", requireRole("admin"), async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-templatesRouter.post("/", requireRole("admin"), async (req, res, next) => {
+templatesRouter.post("/", requireRole("admin", "manager"), async (req, res, next) => {
   try {
     const fields = templateFields(bodyOf(req));
     const row = await prisma.dtaTemplate.create({ data: { tenantId: TENANT_ID, ...fields, createdBy: req.identity!.userId, updatedBy: req.identity!.userId } });
@@ -68,7 +68,7 @@ templatesRouter.post("/", requireRole("admin"), async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-templatesRouter.patch("/:id", requireRole("admin"), async (req, res, next) => {
+templatesRouter.patch("/:id", requireRole("admin", "manager"), async (req, res, next) => {
   try {
     const current = await templateOf(parseId(req.params.id, "id"));
     const fields = templateFields(bodyOf(req), current);
@@ -77,7 +77,7 @@ templatesRouter.patch("/:id", requireRole("admin"), async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-templatesRouter.delete("/:id", requireRole("admin"), async (req, res, next) => {
+templatesRouter.delete("/:id", requireRole("admin", "manager"), async (req, res, next) => {
   try {
     const current = await templateOf(parseId(req.params.id, "id"));
     const row = await prisma.dtaTemplate.update({ where: { id: current.id }, data: { isDeleted: 1, updatedBy: req.identity!.userId } });
@@ -85,14 +85,14 @@ templatesRouter.delete("/:id", requireRole("admin"), async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
-templatesRouter.get("/:id/items", requireRole("admin"), async (req, res, next) => {
+templatesRouter.get("/:id/items", requireRole("admin", "manager"), async (req, res, next) => {
   try {
     const template = await templateOf(parseId(req.params.id, "id"));
     ok(res, await prisma.dtaTemplateItem.findMany({ where: { tenantId: TENANT_ID, templateId: template.id, isDeleted: 0 }, orderBy: [{ weekday: "asc" }, { startTime: "asc" }, { id: "asc" }] }));
   } catch (error) { next(error); }
 });
 
-templatesRouter.post("/:id/items", requireRole("admin"), async (req, res, next) => {
+templatesRouter.post("/:id/items", requireRole("admin", "manager"), async (req, res, next) => {
   try {
     const template = await templateOf(parseId(req.params.id, "id"));
     const fields = itemFields(bodyOf(req));
@@ -102,7 +102,7 @@ templatesRouter.post("/:id/items", requireRole("admin"), async (req, res, next) 
   } catch (error) { next(error); }
 });
 
-templatesRouter.patch("/:id/items/:itemId", requireRole("admin"), async (req, res, next) => {
+templatesRouter.patch("/:id/items/:itemId", requireRole("admin", "manager"), async (req, res, next) => {
   try {
     const template = await templateOf(parseId(req.params.id, "id"));
     const current = await itemOf(template.id, parseId(req.params.itemId, "itemId"));
@@ -113,7 +113,7 @@ templatesRouter.patch("/:id/items/:itemId", requireRole("admin"), async (req, re
   } catch (error) { next(error); }
 });
 
-templatesRouter.delete("/:id/items/:itemId", requireRole("admin"), async (req, res, next) => {
+templatesRouter.delete("/:id/items/:itemId", requireRole("admin", "manager"), async (req, res, next) => {
   try {
     const template = await templateOf(parseId(req.params.id, "id"));
     const current = await itemOf(template.id, parseId(req.params.itemId, "itemId"));
@@ -122,14 +122,14 @@ templatesRouter.delete("/:id/items/:itemId", requireRole("admin"), async (req, r
   } catch (error) { next(error); }
 });
 
-templatesRouter.get("/:id/conditions", requireRole("admin"), async (req, res, next) => {
+templatesRouter.get("/:id/conditions", requireRole("admin", "manager"), async (req, res, next) => {
   try {
     const template = await templateOf(parseId(req.params.id, "id"));
     ok(res, await prisma.dtaTemplateCondition.findMany({ where: { tenantId: TENANT_ID, templateId: template.id, isDeleted: 0 }, orderBy: [{ priority: "asc" }, { id: "asc" }] }));
   } catch (error) { next(error); }
 });
 
-templatesRouter.post("/:id/conditions", requireRole("admin"), async (req, res, next) => {
+templatesRouter.post("/:id/conditions", requireRole("admin", "manager"), async (req, res, next) => {
   try {
     const template = await templateOf(parseId(req.params.id, "id"));
     const fields = conditionFields(bodyOf(req));
@@ -139,7 +139,7 @@ templatesRouter.post("/:id/conditions", requireRole("admin"), async (req, res, n
   } catch (error) { next(error); }
 });
 
-templatesRouter.patch("/:id/conditions/:conditionId", requireRole("admin"), async (req, res, next) => {
+templatesRouter.patch("/:id/conditions/:conditionId", requireRole("admin", "manager"), async (req, res, next) => {
   try {
     const template = await templateOf(parseId(req.params.id, "id"));
     const current = await conditionOf(template.id, parseId(req.params.conditionId, "conditionId"));
@@ -150,7 +150,7 @@ templatesRouter.patch("/:id/conditions/:conditionId", requireRole("admin"), asyn
   } catch (error) { next(error); }
 });
 
-templatesRouter.delete("/:id/conditions/:conditionId", requireRole("admin"), async (req, res, next) => {
+templatesRouter.delete("/:id/conditions/:conditionId", requireRole("admin", "manager"), async (req, res, next) => {
   try {
     const template = await templateOf(parseId(req.params.id, "id"));
     const current = await conditionOf(template.id, parseId(req.params.conditionId, "conditionId"));

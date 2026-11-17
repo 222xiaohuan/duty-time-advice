@@ -19,6 +19,7 @@ datasource db {
 enum DtaRosterabilityStatus {
   ROSTERABLE
   UNROSTERABLE
+  PRIORITY_ROSTERABLE
   STANDBY // 标准产品预留，Demo 默认不启用
 }
 
@@ -85,6 +86,7 @@ model DtaOrg {
   id         Int      @id @default(autoincrement())
   tenantId   Int      @map("tenant_id")
   orgName    String   @map("org_name")
+  priorityRosterEnable Int @default(0) @map("priority_roster_enable") // 是否启用优先排模式
   isDeleted  Int      @default(0) @map("is_deleted")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")

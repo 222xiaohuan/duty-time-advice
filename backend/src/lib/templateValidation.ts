@@ -30,7 +30,7 @@ export function itemFields(body: Record<string, unknown>, current?: ItemFields):
   const weekday = body.weekday === undefined ? current?.weekday : body.weekday;
   if (!Number.isInteger(weekday) || Number(weekday) < 1 || Number(weekday) > 7) bad("weekday 必须为 1 至 7 的整数");
   const statusCode = body.statusCode ?? current?.statusCode;
-  if (statusCode !== DtaRosterabilityStatus.ROSTERABLE && statusCode !== DtaRosterabilityStatus.UNROSTERABLE) bad("Demo 仅支持 ROSTERABLE 和 UNROSTERABLE");
+  if (statusCode !== DtaRosterabilityStatus.ROSTERABLE && statusCode !== DtaRosterabilityStatus.UNROSTERABLE && statusCode !== DtaRosterabilityStatus.PRIORITY_ROSTERABLE) bad("Demo 仅支持 ROSTERABLE、UNROSTERABLE 和 PRIORITY_ROSTERABLE");
   const startTime = parseTime(body.startTime ?? current?.startTime, "startTime");
   const endTime = parseTime(body.endTime ?? current?.endTime, "endTime");
   const endDayOffset = body.endDayOffset === undefined ? current?.endDayOffset ?? 0 : body.endDayOffset;

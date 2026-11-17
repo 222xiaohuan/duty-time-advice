@@ -2,6 +2,7 @@ import { AppError, ErrorCode } from "./response";
 import {
   DtaBaselineRule,
   DtaConflictCheckMode,
+  DtaRosterabilityStatus,
   DtaSubmitMode,
   EMP_TYPE_CODES,
 } from "../types/enums";
@@ -60,6 +61,26 @@ export function validateParamValues(input: Record<string, unknown>): void {
   for (const field of ["fieldSiteEnable", "enableApproval", "specialTagDiffEnable"]) {
     if (parseFlag(input[field], field, 0) !== 0) bad(`${field} 在 Demo 中必须为 0`);
   }
+}
+
+export function allowedRosterabilityStatuses(baselineRule: DtaBaselineRule, submitMode: DtaSubmitMode, priorityEnabled: boolean): DtaRosterabilityStatus[] {
+  if (submitMode === DtaSubmitMode.MODE_NO_SUBMIT) return [];
+  const base = submitMode === DtaSubmitMode.MODE_ALL_STATUS
+    ? [DtaRosterabilityStatus.ROSTERABLE, DtaRosterabilityStatus.UNROSTERABLE]
+    : baselineRule === DtaBaselineRule.BASE_ROSTERABLE
+      ? [DtaRosterabilityStatus.UNROSTERABLE]
+      : [DtaRosterabilityStatus.ROSTERABLE];
+  return priorityEnabled ? [...base, DtaRosterabilityStatus.PRIORITY_ROSTERABLE] : base;
+}
+
+export function baselineStatusMessage(baselineRule: DtaBaselineRule, statusCode: DtaRosterabilityStatus): string | null {
+  if (baselineRule === DtaBaselineRule.BASE_UNROSTERABLE && statusCode === DtaRosterabilityStatus.UNROSTERABLE) {
+    return "已默认全部不可排，无需维护不可排时间";
+  }
+  if (baselineRule === DtaBaselineRule.BASE_ROSTERABLE && statusCode === DtaRosterabilityStatus.ROSTERABLE) {
+    return "已默认全部可排，无需维护可排时间";
+  }
+  return null;
 }
 
 export function isEmployeeType(value: unknown): value is string {

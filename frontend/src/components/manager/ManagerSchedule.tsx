@@ -3,11 +3,12 @@ import { ChevronLeft, ChevronRight, Plus, RefreshCw, Save, Trash2, X } from "luc
 import { Button } from "@/components/ui/button";
 import { apiDelete, apiGet, apiPatch, apiPost, type StatusDictionaryItem } from "@/lib/api";
 import { employeeTypes, errorText, labelOf, posts, weekdays } from "@/lib/admin";
+import { RosterabilityStatus } from "@/lib/enums";
 import type { MockProfile } from "@/lib/identity";
 import { addDays, hkDate, hkTime, hkToday, mondayOf, shortDay } from "@/lib/week";
 
 type Employee = { id: number; empName: string; empTypeCode: string; postCode: string };
-type Directory = { orgId: number; orgName: string; employees: Employee[] };
+type Directory = { orgId: number; orgName: string; priorityRosterEnable: number; employees: Employee[] };
 type RecordRow = { id: number; empId: number; businessDate: string; statusCode: string; startTime: string; endTime: string };
 type ShiftRow = { id: number; empId: number; businessDate: string; shiftName: string; startTime: string; endTime: string; durationMinutes: number };
 type Selection = { empId: number; day: string };
@@ -21,7 +22,12 @@ function minuteOf(iso: string): number {
 }
 
 function durationLabel(minutes: number): string {
-  return `${Number((minutes / 60).toFixed(1))}h`;
+  return `${Number((minutes / 60).toFixed(1))}小时`;
+}
+
+function durationLabelFromTimes(startTime: string, endTime: string): string {
+  const minutes = Math.max(0, Math.round((new Date(endTime).getTime() - new Date(startTime).getTime()) / 60000));
+  return durationLabel(minutes);
 }
 
 export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; statuses: StatusDictionaryItem[] }) {
@@ -49,7 +55,7 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
   const markerRecord = records.find((row) => row.id === selectedMarker?.id);
   const markerEmployee = directory?.employees.find((employee) => employee.id === markerRecord?.empId);
   const markerStatus = statuses.find((status) => status.statusCode === markerRecord?.statusCode);
-  const activeStatuses = statuses.filter((status) => status.enabled === 1 && (status.statusCode === "ROSTERABLE" || status.statusCode === "UNROSTERABLE"));
+  const activeStatuses = statuses.filter((status) => status.enabled === 1 && (status.statusCode === RosterabilityStatus.ROSTERABLE || status.statusCode === RosterabilityStatus.UNROSTERABLE || (status.statusCode === RosterabilityStatus.PRIORITY_ROSTERABLE && directory?.priorityRosterEnable === 1)));
 
   useEffect(() => {
     let active = true;
@@ -134,9 +140,9 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
       const status = statuses.find((item) => item.statusCode === row.statusCode);
       const name = status?.statusName ?? row.statusCode;
       const overnight = hkDate(row.endTime) !== row.businessDate ? "次日 " : "";
-      const label = `${continued ? "前日延续 · " : ""}${name} ${hkTime(row.startTime)}–${overnight}${hkTime(row.endTime)}`;
+      const label = `${continued ? "前日延续 · " : ""}${name} ${hkTime(row.startTime)}–${overnight}${hkTime(row.endTime)} · ${durationLabelFromTimes(row.startTime, row.endTime)}`;
       return <button type="button" className="schedule-marker-track" key={`${row.id}-${day}`} title={label} aria-label={label} aria-pressed={selectedMarker?.id === row.id && selectedMarker.day === day} onClick={() => setSelectedMarker({ id: row.id, day })}>
-        <span style={{ left: `${left}%`, width: `${width}%`, backgroundColor: status?.colorHex ?? (row.statusCode === "ROSTERABLE" ? "#228b22" : "#dc2626") }} />
+        <span style={{ left: `${left}%`, width: `${width}%`, backgroundColor: status?.colorHex ?? (row.statusCode === RosterabilityStatus.ROSTERABLE ? "#4a90e2" : row.statusCode === RosterabilityStatus.PRIORITY_ROSTERABLE ? "#2e8b57" : "#a9a9a9") }} />
       </button>;
     })}</div>;
   }
@@ -157,7 +163,7 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
       <label>员工类型<select value={typeFilter} onChange={(event) => { setTypeFilter(event.target.value); setSelectedMarker(null); }}><option value="">全部类型</option>{employeeTypes.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label>
       <label>岗位<select value={postFilter} onChange={(event) => { setPostFilter(event.target.value); setSelectedMarker(null); }}><option value="">全部岗位</option>{posts.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label>
     </div>
-    <div className="schedule-legend" aria-label="可排性状态">{activeStatuses.map((status) => <span key={status.statusCode}><i style={{ backgroundColor: status.colorHex ?? (status.statusCode === "ROSTERABLE" ? "#228b22" : "#dc2626") }} />{status.statusName}</span>)}</div>
+    <div className="schedule-legend" aria-label="可排性状态">{activeStatuses.map((status) => <span key={status.statusCode}><i style={{ backgroundColor: status.colorHex ?? (status.statusCode === RosterabilityStatus.ROSTERABLE ? "#4a90e2" : status.statusCode === RosterabilityStatus.PRIORITY_ROSTERABLE ? "#2e8b57" : "#a9a9a9") }} />{status.statusName}</span>)}</div>
     {error && <p className="form-error" role="alert">{error}</p>}{notice && <p className="form-success" role="status">{notice}</p>}
     <section className="schedule-board" aria-label="模拟排班周表">
       {loading ? <div className="employee-loading">正在加载班次和可排性记录</div> : employees.length === 0 ? <div className="manager-no-data">当前筛选下没有员工</div> : <div className="schedule-scroll"><div className="schedule-grid">
@@ -173,8 +179,8 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
       </div></div>}
     </section>
     {markerRecord && markerEmployee && selectedMarker && <div className="schedule-marker-detail" role="status">
-      <i style={{ backgroundColor: markerStatus?.colorHex ?? (markerRecord.statusCode === "ROSTERABLE" ? "#228b22" : "#dc2626") }} />
-      <div><strong>{markerEmployee.empName} · {markerStatus?.statusName ?? markerRecord.statusCode}</strong><span>{markerRecord.businessDate} {hkTime(markerRecord.startTime)}–{hkDate(markerRecord.endTime) !== markerRecord.businessDate ? "次日 " : ""}{hkTime(markerRecord.endTime)}{selectedMarker.day !== markerRecord.businessDate ? ` · ${selectedMarker.day} 延续` : ""}</span></div>
+      <i style={{ backgroundColor: markerStatus?.colorHex ?? (markerRecord.statusCode === RosterabilityStatus.ROSTERABLE ? "#4a90e2" : markerRecord.statusCode === RosterabilityStatus.PRIORITY_ROSTERABLE ? "#2e8b57" : "#a9a9a9") }} />
+      <div><strong>{markerEmployee.empName} · {markerStatus?.statusName ?? markerRecord.statusCode}</strong><span>{markerRecord.businessDate} {hkTime(markerRecord.startTime)}–{hkDate(markerRecord.endTime) !== markerRecord.businessDate ? "次日 " : ""}{hkTime(markerRecord.endTime)} · {durationLabelFromTimes(markerRecord.startTime, markerRecord.endTime)}{selectedMarker.day !== markerRecord.businessDate ? ` · ${selectedMarker.day} 延续` : ""}</span></div>
       <Button type="button" variant="ghost" size="icon" title="关闭可排性详情" aria-label="关闭可排性详情" onClick={() => setSelectedMarker(null)}><X size={16} /></Button>
     </div>}
     <section id="schedule-editor" className="schedule-editor" aria-label="模拟班次维护">

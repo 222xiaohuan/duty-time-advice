@@ -4,8 +4,8 @@ import type { DtaEmployee, DtaParamGroup, DtaRosterabilityRecord } from "../gene
 import { prisma } from "./prisma";
 import { addDays, hkDateOf, hkDateTime, hkNow } from "./time";
 import { AppError, ErrorCode } from "./response";
-import { bad, parseDate, parseId, parseTime, TENANT_ID } from "./validation";
-import { BUSINESS_TIME_ZONE, DtaRosterabilityStatus, DtaSourceCode, DtaSubmitMode } from "../types/enums";
+import { allowedRosterabilityStatuses, bad, baselineStatusMessage, parseDate, parseId, parseTime, TENANT_ID } from "./validation";
+import { BUSINESS_TIME_ZONE, DtaRosterabilityStatus, DtaSourceCode } from "../types/enums";
 
 export type RecordInput = {
   businessDate: string;
@@ -41,8 +41,9 @@ async function paramFor(employee: DtaEmployee): Promise<DtaParamGroup> {
 }
 
 export function isLocked(businessDate: string, cutoffDays: number, now: Date = new Date()): boolean {
-  const lockAt = DateTime.fromISO(`${businessDate}T00:00`, { zone: BUSINESS_TIME_ZONE }).minus({ days: cutoffDays });
-  return hkNow(now) >= lockAt;
+  const today = hkNow(now).toISODate()!;
+  if (businessDate < today) return true;
+  return cutoffDays > 0 && businessDate <= addDays(today, cutoffDays - 1);
 }
 
 function localTime(value: Date): string {
@@ -52,7 +53,7 @@ function localTime(value: Date): string {
 export function inputFrom(body: Record<string, unknown>, current?: RecordLike): RecordInput {
   const businessDate = parseDate(body.businessDate ?? current?.businessDate, "businessDate");
   const statusCode = body.statusCode ?? current?.statusCode;
-  if (statusCode !== DtaRosterabilityStatus.ROSTERABLE && statusCode !== DtaRosterabilityStatus.UNROSTERABLE) bad("Demo 仅支持 ROSTERABLE 和 UNROSTERABLE");
+  if (statusCode !== DtaRosterabilityStatus.ROSTERABLE && statusCode !== DtaRosterabilityStatus.UNROSTERABLE && statusCode !== DtaRosterabilityStatus.PRIORITY_ROSTERABLE) bad("Demo 仅支持 ROSTERABLE、UNROSTERABLE 和 PRIORITY_ROSTERABLE");
   const startTime = parseTime(body.startTime ?? (current ? localTime(current.startTime) : undefined), "startTime");
   const endTime = parseTime(body.endTime ?? (current ? localTime(current.endTime) : undefined), "endTime");
   const endDayOffset = body.endDayOffset === undefined
@@ -73,14 +74,17 @@ function checkEditable(identity: MockIdentity, param: DtaParamGroup, businessDat
   if (isLocked(businessDate, param.cutoffDays, now)) forbidden("该业务日期已到报备截止时间，记录只读");
 }
 
-async function checkStatus(identity: MockIdentity, statusCode: DtaRosterabilityStatus, param: DtaParamGroup): Promise<void> {
+async function checkStatus(identity: MockIdentity, statusCode: DtaRosterabilityStatus, param: DtaParamGroup, employee: DtaEmployee): Promise<void> {
   const status = await prisma.dtaRosterabilityStatusDict.findFirst({ where: { tenantId: TENANT_ID, statusCode, enabled: 1, isDeleted: 0 } });
   if (!status) bad("该可排性状态未启用");
+  const org = await prisma.dtaOrg.findFirst({ where: { id: employee.orgId, tenantId: TENANT_ID, isDeleted: 0 } });
+  if (!org) missing("员工所属组织不存在");
+  if (statusCode === DtaRosterabilityStatus.PRIORITY_ROSTERABLE && org.priorityRosterEnable !== 1) forbidden("所属组织未启用优先排班模式");
+  const baselineMessage = baselineStatusMessage(param.baselineRule, statusCode);
+  if (baselineMessage) bad(baselineMessage);
   if (identity.role !== "employee") return;
   if (status.empSelfEdit !== 1) forbidden("该可排性状态不允许员工自主选择");
-  if (param.submitMode === DtaSubmitMode.MODE_NO_SUBMIT) forbidden("当前参数不允许员工提报");
-  if (param.submitMode === DtaSubmitMode.MODE_ONLY_ROSTERABLE && statusCode !== DtaRosterabilityStatus.ROSTERABLE) forbidden("当前参数只允许提报可排");
-  if (param.submitMode === DtaSubmitMode.MODE_ONLY_UNROSTERABLE && statusCode !== DtaRosterabilityStatus.UNROSTERABLE) forbidden("当前参数只允许提报不可排");
+  if (!allowedRosterabilityStatuses(param.baselineRule, param.submitMode, org.priorityRosterEnable === 1).includes(statusCode)) forbidden("当前参数不允许提报该可排性状态");
 }
 
 async function checkShift(empId: number, input: RecordInput): Promise<void> {
@@ -103,7 +107,7 @@ export async function createRecord(identity: MockIdentity, empId: number, body: 
   const param = await paramFor(employee);
   const input = inputFrom(body);
   checkEditable(identity, param, input.businessDate, now);
-  await checkStatus(identity, input.statusCode, param);
+  await checkStatus(identity, input.statusCode, param, employee);
   await checkShift(empId, input);
   await checkDuplicate(empId, input);
   return prisma.dtaRosterabilityRecord.create({ data: {
@@ -136,7 +140,7 @@ export async function updateRecord(identity: MockIdentity, id: number, body: Rec
   const input = inputFrom(body, record);
   if (record.templateItemId !== null && input.businessDate !== record.businessDate) bad("模板生成记录不能更改业务日期");
   checkEditable(identity, param, input.businessDate, now);
-  await checkStatus(identity, input.statusCode, param);
+  await checkStatus(identity, input.statusCode, param, employee);
   await checkShift(record.empId, input);
   await checkDuplicate(record.empId, input, id);
   try {

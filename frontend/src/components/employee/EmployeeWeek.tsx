@@ -3,16 +3,19 @@ import { ChevronLeft, ChevronRight, Copy, Download, Plus, Save, Trash2, Upload }
 import { Button } from "@/components/ui/button";
 import { apiDelete, apiGet, apiPatch, apiPost, type SourceDictionaryItem } from "@/lib/api";
 import { errorText, weekdays } from "@/lib/admin";
+import { RosterabilityStatus } from "@/lib/enums";
 import type { MockProfile } from "@/lib/identity";
+import { baselineStatusMessage } from "@/lib/rosterability";
 import { addDays, dayLocked, hkDate, hkTime, hkToday, mondayOf, shortDay } from "@/lib/week";
 
 type AllowedStatus = { statusCode: string; statusName: string; colorHex: string | null };
-type Config = { empId: number; empName: string; cutoffDays: number; baselineRule: string; submitMode: string; empEditEnable: number; allowedStatuses: AllowedStatus[] };
+type Config = { empId: number; empName: string; cutoffDays: number; baselineRule: string; submitMode: string; empEditEnable: number; priorityRosterEnable: number; allowedStatuses: AllowedStatus[] };
 type RecordRow = { id: number; businessDate: string; statusCode: string; sourceCode: string; startTime: string; endTime: string; remark: string | null; locked: number };
 type Form = { businessDate: string; statusCode: string; startTime: string; endTime: string; endDayOffset: number; remark: string };
 type BatchResult = { businessDate: string; sourceId?: number | null; success: boolean; recordId?: number; message?: string };
 type BatchResponse = { created: number; failed: number; results: BatchResult[] };
 const initialForm = (date: string, statusCode: string): Form => ({ businessDate: date, statusCode, startTime: "09:00", endTime: "17:00", endDayOffset: 0, remark: "" });
+const statusClass = (code: string) => code === RosterabilityStatus.ROSTERABLE ? "rosterable" : code === RosterabilityStatus.PRIORITY_ROSTERABLE ? "priority" : "unrosterable";
 function submittedForm(element: HTMLFormElement, current: Form): Form {
   const values = new FormData(element);
   return { ...current,
@@ -42,6 +45,7 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
   const dates = Array.from({ length: 7 }, (_, index) => addDays(monday, index));
   const canEdit = Boolean(config?.empEditEnable && config.allowedStatuses.length);
   const formStatusAllowed = Boolean(config?.allowedStatuses.some((status) => status.statusCode === form.statusCode));
+  const baselineMessage = config ? baselineStatusMessage(config.baselineRule, form.statusCode) : null;
   const selectedLocked = config ? dayLocked(selectedDay, config.cutoffDays) : true;
 
   useEffect(() => {
@@ -80,7 +84,7 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
     setError("");
   }
   async function save(event: React.FormEvent) {
-    event.preventDefault(); if (!canEdit || selectedLocked || !formStatusAllowed) return;
+    event.preventDefault(); if (!canEdit || selectedLocked || !formStatusAllowed || baselineMessage) { if (baselineMessage) setError(baselineMessage); return; }
     setBusy(true); setError(""); setMessage(""); setBatchResult(null);
     try {
       const entered = submittedForm(event.currentTarget as HTMLFormElement, form);
@@ -121,22 +125,22 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
       const dayRecords = records.filter((row) => row.businessDate === day);
       return <section className={`employee-day ${selectedDay === day && !batchMode ? "selected" : ""} ${locked ? "locked" : ""}`} key={day}>
         <button type="button" className="employee-day-head" onClick={() => chooseDay(day)} aria-pressed={batchMode ? selectedDates.includes(day) : selectedDay === day}><span><strong>{weekdays[index]}</strong><small>{shortDay(day)}</small></span><span className="day-head-side">{batchMode ? <input type="checkbox" tabIndex={-1} readOnly checked={selectedDates.includes(day)} /> : locked ? "只读" : <Plus size={15} />}</span></button>
-        <div className="employee-day-entries">{dayRecords.map((row) => <button type="button" className={`employee-entry ${row.statusCode === "ROSTERABLE" ? "rosterable" : "unrosterable"}`} key={row.id} onClick={() => edit(row)}><strong>{row.statusCode === "ROSTERABLE" ? "可排" : "不可排"}</strong><span>{hkTime(row.startTime)}–{hkDate(row.endTime) !== day ? "次日 " : ""}{hkTime(row.endTime)}</span></button>)}{dayRecords.length === 0 && <span className="day-empty">无记录</span>}</div>
+        <div className="employee-day-entries">{dayRecords.map((row) => <button type="button" className={`employee-entry ${statusClass(row.statusCode)}`} key={row.id} onClick={() => edit(row)}><strong>{config?.allowedStatuses.find((status) => status.statusCode === row.statusCode)?.statusName ?? row.statusCode}</strong><span>{hkTime(row.startTime)}–{hkDate(row.endTime) !== day ? "次日 " : ""}{hkTime(row.endTime)}</span></button>)}{dayRecords.length === 0 && <span className="day-empty">无记录</span>}</div>
       </section>;
     })}</div>}
     <div className="employee-lower">
       <section className="employee-editor">
         <div className="admin-intro"><h2>{batchMode ? "多日期统一设置" : editingId ? "编辑时段" : "新增时段"}</h2><span>{batchMode ? `${selectedDates.length} 个日期` : selectedDay}</span></div>
-        {batchMode ? <form onSubmit={(event) => { event.preventDefault(); if (selectedDates.length) { const entered = submittedForm(event.currentTarget, form); void runBatch("/rosterability-records/batch/set-dates", { dates: selectedDates, statusCode: entered.statusCode, startTime: entered.startTime, endTime: entered.endTime, endDayOffset: entered.endDayOffset, remark: entered.remark || null }); } }} className="employee-form">
+        {batchMode ? <form onSubmit={(event) => { event.preventDefault(); if (selectedDates.length && !baselineMessage) { const entered = submittedForm(event.currentTarget, form); void runBatch("/rosterability-records/batch/set-dates", { dates: selectedDates, statusCode: entered.statusCode, startTime: entered.startTime, endTime: entered.endTime, endDayOffset: entered.endDayOffset, remark: entered.remark || null }); } else if (baselineMessage) setError(baselineMessage); }} className="employee-form">
           <RecordFields form={form} setForm={setForm} statuses={config?.allowedStatuses ?? []} disabled={!canEdit || busy} />
-          <Button type="submit" disabled={!canEdit || !formStatusAllowed || busy || selectedDates.length === 0}><Save size={16} />应用到所选日期</Button>
+          {baselineMessage && <p className="form-error" role="alert">{baselineMessage}</p>}<Button type="submit" disabled={!canEdit || !formStatusAllowed || Boolean(baselineMessage) || busy || selectedDates.length === 0}><Save size={16} />应用到所选日期</Button>
         </form> : selectedLocked || !canEdit ? <div className="employee-readonly">{selectedLocked ? "该业务日期已到报备截止时间，记录只读" : "当前参数不允许员工提报"}</div> : <form onSubmit={save} className="employee-form">
           <RecordFields form={form} setForm={setForm} statuses={config?.allowedStatuses ?? []} disabled={busy} />
-          {!formStatusAllowed && <p className="form-error">当前状态已不允许员工提报，请选择其他状态。</p>}
-          <div className="admin-actions"><Button type="submit" disabled={busy || !formStatusAllowed}><Save size={16} />{editingId ? "保存修改" : "新增时段"}</Button>{editingId && <Button type="button" variant="outline" onClick={() => { setEditingId(null); setForm(initialForm(selectedDay, config?.allowedStatuses[0]?.statusCode ?? "")); }}>取消</Button>}{editingId && <Button type="button" variant="outline" disabled={busy} onClick={() => { const row = records.find((record) => record.id === editingId); if (row) void remove(row); }}><Trash2 size={15} />删除</Button>}</div>
+          {!formStatusAllowed && <p className="form-error">当前状态已不允许员工提报，请选择其他状态。</p>}{baselineMessage && <p className="form-error" role="alert">{baselineMessage}</p>}
+          <div className="admin-actions"><Button type="submit" disabled={busy || !formStatusAllowed || Boolean(baselineMessage)}><Save size={16} />{editingId ? "保存修改" : "新增时段"}</Button>{editingId && <Button type="button" variant="outline" onClick={() => { setEditingId(null); setForm(initialForm(selectedDay, config?.allowedStatuses[0]?.statusCode ?? "")); }}>取消</Button>}{editingId && <Button type="button" variant="outline" disabled={busy} onClick={() => { const row = records.find((record) => record.id === editingId); if (row) void remove(row); }}><Trash2 size={15} />删除</Button>}</div>
         </form>}
       </section>
-      <aside className="employee-detail"><h2>当天记录</h2>{records.filter((row) => row.businessDate === selectedDay).map((row) => <div className="employee-detail-row" key={row.id}><strong>{row.statusCode === "ROSTERABLE" ? "可排" : "不可排"} · {hkTime(row.startTime)}–{hkDate(row.endTime) !== selectedDay ? "次日 " : ""}{hkTime(row.endTime)}</strong><span>{sources.find((source) => source.sourceCode === row.sourceCode)?.sourceName ?? row.sourceCode}</span>{row.remark && <p>{row.remark}</p>}</div>)}{records.every((row) => row.businessDate !== selectedDay) && <p className="muted-text">当天暂无记录</p>}<p className="employee-note">标准产品对接独立消息提醒模块，Demo 不发送消息。</p></aside>
+      <aside className="employee-detail"><h2>当天记录</h2>{records.filter((row) => row.businessDate === selectedDay).map((row) => <div className="employee-detail-row" key={row.id}><strong>{config?.allowedStatuses.find((status) => status.statusCode === row.statusCode)?.statusName ?? row.statusCode} · {hkTime(row.startTime)}–{hkDate(row.endTime) !== selectedDay ? "次日 " : ""}{hkTime(row.endTime)}</strong><span>{sources.find((source) => source.sourceCode === row.sourceCode)?.sourceName ?? row.sourceCode}</span>{row.remark && <p>{row.remark}</p>}</div>)}{records.every((row) => row.businessDate !== selectedDay) && <p className="muted-text">当天暂无记录</p>}<p className="employee-note">标准产品对接独立消息提醒模块，Demo 不发送消息。</p></aside>
     </div>
     {error && <p className="form-error" role="alert">{error}</p>}{message && <p className="form-success" role="status">{message}</p>}
     {batchResult && <section className="batch-results" aria-label="批量操作结果"><h2>逐项结果</h2>{batchResult.results.length === 0 && <p className="muted-text">没有可复制的记录</p>}{batchResult.results.map((result, index) => <div className={result.success ? "batch-ok" : "batch-fail"} key={`${result.businessDate}-${result.sourceId ?? index}`}><strong>{result.businessDate}</strong><span>{result.success ? "已新增" : result.message ?? "失败"}</span></div>)}</section>}

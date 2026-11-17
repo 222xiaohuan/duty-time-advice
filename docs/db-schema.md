@@ -21,6 +21,7 @@
 
 - `ROSTERABLE`
 - `UNROSTERABLE`
+- `PRIORITY_ROSTERABLE`
 - `STANDBY`（标准产品预留，Demo 默认不启用）
 
 `locked` 是独立的只读标记，不属于该枚举。
@@ -90,6 +91,7 @@
 | id | int | 主键自增 |
 | tenant_id | int | 租户 ID |
 | org_name | text(100) | 组织名称 |
+| priority_roster_enable | int | 是否启用优先排班模式，默认 0 |
 | is_deleted | int | 默认 0 |
 | created_at | datetime | 创建时间 |
 | updated_at | datetime | 更新时间 |
@@ -158,7 +160,7 @@ Demo 不增加班组、职级或自定义字段。
 | tenant_id | int | 租户 ID |
 | org_id | int | 组织 ID |
 | emp_type_code | text(50) | 员工类型编码 |
-| cutoff_days | int | 0至30 |
+| cutoff_days | int | 0至30；从香港今天开始连续锁定 N 个自然日（包含当天） |
 | baseline_rule | enum | `DtaBaselineRule` |
 | submit_mode | enum | `DtaSubmitMode` |
 | emp_edit_enable | int | 员工自主编辑开关 |
@@ -307,7 +309,7 @@ Demo 不增加班组、职级或自定义字段。
 
 `before_json` / `after_json` 使用 `text` 保存 JSON 字符串；序列化时日期统一输出 ISO 字符串。
 
-成功生成的记录以 `target_type=record`、`action_code=TEMPLATE_GEN` 记载；已匹配模板但因锁定或班次冲突跳过时，标准产品可用 `target_type=template`、模板 ID、员工、业务日期及 `remark` 记载原因，`status_code` 和 `source_code` 留空。独立的操作入口字段尚未预留，正式产品落地时另行扩展结构。Demo 不读写本表。
+成功生成的记录以 `target_type=record`、`action_code=TEMPLATE_GEN` 记载；已匹配模板但因锁定或班次冲突跳过时，标准产品可通过 `target_type=template`、模板 ID、员工、业务日期及 `remark` 记载原因，`status_code` 和 `source_code` 留空。独立的操作入口字段尚未预留，正式产品落地时另行扩展结构。Demo 不读写本表。
 
 ## 15. 本期不建表的能力
 

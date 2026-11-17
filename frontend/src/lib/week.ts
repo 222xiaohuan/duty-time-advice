@@ -14,7 +14,15 @@ export function mondayOf(day: string): string {
 }
 
 export function dayLocked(day: string, cutoffDays: number): boolean {
-  return Date.now() >= Date.parse(`${day}T00:00:00+08:00`) - cutoffDays * DAY_MS;
+  const today = hkToday();
+  if (day < today) return true;
+  return cutoffDays > 0 && day <= addDays(today, cutoffDays - 1);
+}
+
+export function managerLockMessage(day: string, cutoffDays: number | null): string | null {
+  if (day < hkToday()) return "无法修改过去日期的可排时间";
+  if (cutoffDays !== null && dayLocked(day, cutoffDays)) return "已提前锁定可排时间";
+  return null;
 }
 
 export function hkTime(iso: string): string {

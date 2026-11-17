@@ -7,6 +7,7 @@ import type { MockProfile } from "@/lib/identity";
 import { employeeTypes, errorText, orgs } from "@/lib/admin";
 
 type Param = { id?: number; orgId: number; empTypeCode: string; cutoffDays: number; baselineRule: string; submitMode: string; empEditEnable: number; autoGenRangeWeek: number; fieldSiteEnable: number; enableApproval: number; specialTagDiffEnable: number };
+type OrgSetting = { id: number; orgName: string; priorityRosterEnable: number };
 const modes = [
   { code: SubmitMode.MODE_ONLY_UNROSTERABLE, name: "仅报不可排" },
   { code: SubmitMode.MODE_ONLY_ROSTERABLE, name: "仅报可排" },
@@ -26,20 +27,24 @@ function allowed(baseline: string, mode: string) {
 
 export function Parameters({ profile }: { profile: MockProfile }) {
   const [rows, setRows] = useState<Param[]>([]);
+  const [orgSettings, setOrgSettings] = useState<OrgSetting[]>([]);
   const [orgId, setOrgId] = useState(1);
   const [empTypeCode, setEmpTypeCode] = useState("FULL_TIME");
   const [form, setForm] = useState<Param>(defaultParam(1, "FULL_TIME"));
+  const [priorityRosterEnable, setPriorityRosterEnable] = useState(0);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
 
   async function load() {
-    const data = await apiGet<Param[]>("/param-groups", profile);
-    setRows(data);
+    const [data, settings] = await Promise.all([apiGet<Param[]>("/param-groups", profile), apiGet<OrgSetting[]>("/orgs", profile)]);
+    setRows(data); setOrgSettings(settings);
+    setPriorityRosterEnable(settings.find((row) => row.id === orgId)?.priorityRosterEnable ?? 0);
     setForm(data.find((row) => row.orgId === orgId && row.empTypeCode === empTypeCode) ?? defaultParam(orgId, empTypeCode));
   }
   useEffect(() => { void load().catch((cause) => setError(errorText(cause))); }, [profile]);
   useEffect(() => { setForm(rows.find((row) => row.orgId === orgId && row.empTypeCode === empTypeCode) ?? defaultParam(orgId, empTypeCode)); setMessage(""); setError(""); }, [rows, orgId, empTypeCode]);
+  useEffect(() => { setPriorityRosterEnable(orgSettings.find((row) => row.id === orgId)?.priorityRosterEnable ?? 0); }, [orgSettings, orgId]);
 
   async function save(event: React.FormEvent) {
     event.preventDefault(); setError(""); setMessage("");
@@ -52,6 +57,7 @@ export function Parameters({ profile }: { profile: MockProfile }) {
         empEditEnable: form.empEditEnable, autoGenRangeWeek: form.autoGenRangeWeek, conflictCheckMode: "STRONG_BLOCK" };
       if (form.id) await apiPatch(`/param-groups/${form.id}`, profile, payload);
       else await apiPost("/param-groups", profile, payload);
+      await apiPatch(`/orgs/${orgId}`, profile, { priorityRosterEnable });
       await load(); setMessage("参数已保存");
     } catch (cause) { setError(errorText(cause)); } finally { setBusy(false); }
   }
@@ -67,10 +73,11 @@ export function Parameters({ profile }: { profile: MockProfile }) {
         <label>基线规则<select value={form.baselineRule} onChange={(event) => { const baselineRule = event.target.value; setForm({ ...form, baselineRule, submitMode: allowed(baselineRule, form.submitMode) ? form.submitMode : baselineRule === BaselineRule.BASE_ROSTERABLE ? SubmitMode.MODE_ONLY_UNROSTERABLE : SubmitMode.MODE_ONLY_ROSTERABLE }); }}>
           <option value={BaselineRule.BASE_ROSTERABLE}>默认可排</option><option value={BaselineRule.BASE_UNROSTERABLE}>默认不可排</option></select></label>
         <label>员工提报模式<select value={form.submitMode} onChange={(event) => setForm({ ...form, submitMode: event.target.value })}>{modes.map((mode) => <option key={mode.code} value={mode.code} disabled={!allowed(form.baselineRule, mode.code)}>{mode.name}</option>)}</select></label>
-        <label>提前锁定天数<input type="number" min="0" max="30" step="1" required value={form.cutoffDays} onChange={(event) => setForm({ ...form, cutoffDays: event.target.valueAsNumber })} /></label>
+        <label>当前员工类型提前锁定天数（包含当天）<input type="number" min="0" max="30" step="1" required value={form.cutoffDays} onChange={(event) => setForm({ ...form, cutoffDays: event.target.valueAsNumber })} /></label>
         <label>手动生成未来周数<input type="number" min="1" max="12" step="1" required value={form.autoGenRangeWeek} onChange={(event) => setForm({ ...form, autoGenRangeWeek: event.target.valueAsNumber })} /></label>
       </div>
       <label className="admin-check"><input type="checkbox" checked={form.empEditEnable === 1} onChange={(event) => setForm({ ...form, empEditEnable: event.target.checked ? 1 : 0 })} />允许员工自主编辑</label>
+      <label className="admin-check"><input type="checkbox" checked={priorityRosterEnable === 1} onChange={(event) => setPriorityRosterEnable(event.target.checked ? 1 : 0)} />启用优先排班模式<span>{priorityRosterEnable === 1 ? "开启" : "关闭"}</span></label>
       <div className="admin-reserved" aria-label="预留功能状态">{["场地", "审批", "特殊日期差异化"].map((name) => <label key={name} className="admin-check"><input type="checkbox" checked={false} disabled readOnly />{name}<span>关闭</span></label>)}</div>
       {error && <p className="form-error" role="alert">{error}</p>}{message && <p className="form-success" role="status">{message}</p>}
       <div className="admin-actions"><Button type="submit" disabled={busy}><Save size={16} />{busy ? "保存中" : "保存参数"}</Button></div>

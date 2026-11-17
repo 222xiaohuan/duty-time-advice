@@ -42,14 +42,20 @@ async function main() {
 
   await prisma.dtaTenant.create({ data: { id: tenantId, tenantName: "HKJC Demo", ...by } });
 
-  const org1 = await prisma.dtaOrg.create({ data: { id: 1, tenantId, orgName: "沙田马场 · 投注服务部", ...by } });
-  const org2 = await prisma.dtaOrg.create({ data: { id: 2, tenantId, orgName: "跑马地马场 · 客户服务部", ...by } });
+  const org1 = await prisma.dtaOrg.create({ data: { id: 1, tenantId, orgName: "沙田马场 · 投注服务部", priorityRosterEnable: 0, ...by } });
+  const org2 = await prisma.dtaOrg.create({ data: { id: 2, tenantId, orgName: "跑马地马场 · 客户服务部", priorityRosterEnable: 0, ...by } });
 
   const employees = [
     { id: 1, orgId: org1.id, empName: "陈志明", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.BETTING_SERVICE },
     { id: 2, orgId: org1.id, empName: "李嘉欣", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.CROWD_CONTROL },
     { id: 3, orgId: org1.id, empName: "黄伟强", empTypeCode: EMP_TYPE_CODES.PART_TIME, postCode: POST_CODES.BETTING_SERVICE },
     { id: 4, orgId: org1.id, empName: "张美玲", empTypeCode: EMP_TYPE_CODES.PART_TIME, postCode: POST_CODES.CROWD_CONTROL },
+    { id: 9, orgId: org1.id, empName: "王志豪", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.BETTING_SERVICE },
+    { id: 10, orgId: org1.id, empName: "陈雅婷", empTypeCode: EMP_TYPE_CODES.PART_TIME, postCode: POST_CODES.CROWD_CONTROL },
+    { id: 11, orgId: org1.id, empName: "林家俊", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.CROWD_CONTROL },
+    { id: 12, orgId: org1.id, empName: "何嘉怡", empTypeCode: EMP_TYPE_CODES.PART_TIME, postCode: POST_CODES.BETTING_SERVICE },
+    { id: 13, orgId: org1.id, empName: "梁文杰", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.BETTING_SERVICE },
+    { id: 14, orgId: org1.id, empName: "苏晓彤", empTypeCode: EMP_TYPE_CODES.PART_TIME, postCode: POST_CODES.CROWD_CONTROL },
     { id: 5, orgId: org2.id, empName: "刘家豪", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.CUSTOMER_SERVICE },
     { id: 6, orgId: org2.id, empName: "吴咏诗", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.CROWD_CONTROL },
     { id: 7, orgId: org2.id, empName: "林俊杰", empTypeCode: EMP_TYPE_CODES.PART_TIME, postCode: POST_CODES.CUSTOMER_SERVICE },
@@ -59,8 +65,9 @@ async function main() {
 
   await prisma.dtaRosterabilityStatusDict.createMany({
     data: [
-      { tenantId, statusCode: DtaRosterabilityStatus.ROSTERABLE, statusName: "可排", nameI18n: JSON.stringify({ en: "Rosterable", "zh-HK": "可排" }), colorHex: "#228B22", allowSchedule: 1, empSelfEdit: 1, enabled: 1, ...by },
-      { tenantId, statusCode: DtaRosterabilityStatus.UNROSTERABLE, statusName: "不可排", nameI18n: JSON.stringify({ en: "Unrosterable", "zh-HK": "不可排" }), colorHex: "#dc2626", allowSchedule: 0, empSelfEdit: 1, enabled: 1, ...by },
+      { tenantId, statusCode: DtaRosterabilityStatus.ROSTERABLE, statusName: "可排", nameI18n: JSON.stringify({ en: "Rosterable", "zh-HK": "可排" }), colorHex: "#4a90e2", allowSchedule: 1, empSelfEdit: 1, enabled: 1, ...by },
+      { tenantId, statusCode: DtaRosterabilityStatus.UNROSTERABLE, statusName: "不可排", nameI18n: JSON.stringify({ en: "Unrosterable", "zh-HK": "不可排" }), colorHex: "#a9a9a9", allowSchedule: 0, empSelfEdit: 1, enabled: 1, ...by },
+      { tenantId, statusCode: DtaRosterabilityStatus.PRIORITY_ROSTERABLE, statusName: "优先排", nameI18n: JSON.stringify({ en: "Priority Rosterable", "zh-HK": "優先排" }), colorHex: "#2e8b57", allowSchedule: 1, empSelfEdit: 1, enabled: 1, ...by },
       { tenantId, statusCode: DtaRosterabilityStatus.STANDBY, statusName: "仅后备待命", nameI18n: JSON.stringify({ en: "Standby", "zh-HK": "僅後備待命" }), colorHex: "#f59e0b", allowSchedule: 0, empSelfEdit: 0, enabled: 0, ...by },
     ],
   });
@@ -88,7 +95,7 @@ async function main() {
     await prisma.dtaParamGroup.create({
       data: {
         tenantId, orgId, empTypeCode: EMP_TYPE_CODES.PART_TIME,
-        cutoffDays: 2, baselineRule: DtaBaselineRule.BASE_UNROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_ROSTERABLE,
+        cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_UNROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_ROSTERABLE,
         empEditEnable: 1, templateAutoGenEnable: 0, autoGenRangeWeek: 4, autoGenWeekday: null, autoGenTime: null,
         conflictCheckMode: DtaConflictCheckMode.STRONG_BLOCK, ...by,
       },

@@ -25,10 +25,11 @@ type LoadState = {
 const initialState: LoadState = { phase: "loading", identity: null, health: null, statuses: [], sources: [], message: null };
 const groups = [...new Set(profiles.map((profile) => profile.group))];
 const roleNames = { admin: "管理员", manager: "主管", employee: "员工" } as const;
+type View = "workspace" | "schedule" | "parameters" | "templates";
 
 function App() {
   const [profile, setProfile] = useState<MockProfile>(initialProfile);
-  const [view, setView] = useState<"workspace" | "schedule" | "parameters" | "templates">("workspace");
+  const [view, setView] = useState<View>(() => initialProfile().role === "admin" ? "parameters" : "workspace");
   const [refreshKey, setRefreshKey] = useState(0);
   const [state, setState] = useState<LoadState>(initialState);
 
@@ -57,7 +58,7 @@ function App() {
     if (!next) return;
     rememberProfile(next);
     setProfile(next);
-    setView("workspace");
+    setView(next.role === "admin" ? "parameters" : "workspace");
   }
 
   const activeStatuses = state.statuses.filter((item) => item.enabled === 1);
@@ -90,18 +91,18 @@ function App() {
     <div className="workspace">
       <aside className="sidebar" aria-label="主导航">
         <div className="sidebar-section-label">排班管理</div>
-        <button className={`sidebar-link ${view === "workspace" ? "sidebar-active" : ""}`} onClick={() => setView("workspace")}><CalendarDays size={17} /><span>排班时间报备</span></button>
-        {profile.role === "manager" && <button className={`sidebar-link ${view === "schedule" ? "sidebar-active" : ""}`} onClick={() => setView("schedule")}><CalendarRange size={17} /><span>模拟排班</span></button>}
-        {profile.role === "admin" && <><div className="sidebar-section-label admin-nav-label">管理设置</div><button className={`sidebar-link ${view === "parameters" ? "sidebar-active" : ""}`} onClick={() => setView("parameters")}><Settings2 size={17} /><span>组织参数</span></button><button className={`sidebar-link ${view === "templates" ? "sidebar-active" : ""}`} onClick={() => setView("templates")}><CalendarDays size={17} /><span>周模板</span></button></>}
+        {profile.role !== "admin" && <button className={`sidebar-link ${view === "workspace" ? "sidebar-active" : ""}`} onClick={() => setView("workspace")}><CalendarDays size={17} /><span>排班时间报备</span></button>}
+        {profile.role === "manager" && <><button className={`sidebar-link ${view === "schedule" ? "sidebar-active" : ""}`} onClick={() => setView("schedule")}><CalendarRange size={17} /><span>模拟排班</span></button><button className={`sidebar-link ${view === "templates" ? "sidebar-active" : ""}`} onClick={() => setView("templates")}><CalendarDays size={17} /><span>周模板</span></button></>}
+        {profile.role === "admin" && <><div className="sidebar-section-label admin-nav-label">管理设置</div><button className={`sidebar-link ${view === "parameters" ? "sidebar-active" : ""}`} onClick={() => setView("parameters")}><Settings2 size={17} /><span>组织参数</span></button></>}
         <div className="sidebar-footer"><span className="sidebar-footer-mark">HKJC</span><span>Workforce Management</span></div>
       </aside>
 
       <main className="main-content">
-        {profile.role === "admin" && <nav className="admin-mobile-nav" aria-label="管理设置"><button className={view === "workspace" ? "selected" : ""} onClick={() => setView("workspace")}>工作台</button><button className={view === "parameters" ? "selected" : ""} onClick={() => setView("parameters")}>组织参数</button><button className={view === "templates" ? "selected" : ""} onClick={() => setView("templates")}>周模板</button></nav>}
-        {profile.role === "manager" && <nav className="admin-mobile-nav" aria-label="主管页面"><button className={view === "workspace" ? "selected" : ""} onClick={() => setView("workspace")}>可排性</button><button className={view === "schedule" ? "selected" : ""} onClick={() => setView("schedule")}>模拟排班</button></nav>}
+        {profile.role === "admin" && <nav className="admin-mobile-nav" aria-label="管理设置"><button className={view === "parameters" ? "selected" : ""} onClick={() => setView("parameters")}>组织参数</button></nav>}
+        {profile.role === "manager" && <nav className="admin-mobile-nav" aria-label="主管页面"><button className={view === "workspace" ? "selected" : ""} onClick={() => setView("workspace")}>可排性</button><button className={view === "schedule" ? "selected" : ""} onClick={() => setView("schedule")}>模拟排班</button><button className={view === "templates" ? "selected" : ""} onClick={() => setView("templates")}>周模板</button></nav>}
         <div className="breadcrumb">排班管理 <span>/</span> {view === "parameters" ? "组织参数" : view === "templates" ? "周模板" : view === "schedule" ? "模拟排班" : "排班时间报备"}</div>
         <div className="page-heading">
-          <div><h1>{view === "parameters" ? "组织参数" : view === "templates" ? "周模板" : view === "schedule" ? "模拟排班" : "排班时间报备"}</h1><p>{view === "schedule" ? "主管排班" : view === "workspace" ? "工作台" : "管理员设置"}</p></div>
+          <div><h1>{view === "parameters" ? "组织参数" : view === "templates" ? "周模板" : view === "schedule" ? "模拟排班" : "排班时间报备"}</h1><p>{view === "schedule" ? "主管排班" : view === "templates" ? "主管模板" : view === "workspace" ? "工作台" : "管理员设置"}</p></div>
           <div className="heading-actions">
             <span className={`connection-state ${state.phase === "ready" ? "is-ready" : state.phase === "error" ? "is-error" : ""}`}>
               <span className="connection-dot" />
@@ -113,9 +114,7 @@ function App() {
 
         {state.message && <div className="error-banner" role="alert"><AlertCircle size={18} /><span>{state.message}</span><Button size="sm" variant="outline" onClick={() => setRefreshKey((value) => value + 1)}>重试</Button></div>}
 
-        {profile.role === "employee" ? <EmployeeWeek key={profile.key} profile={profile} sources={state.sources} /> : profile.role === "manager" ? view === "schedule" ? <ManagerSchedule key={profile.key} profile={profile} statuses={state.statuses} /> : <ManagerRoster key={profile.key} profile={profile} statuses={state.statuses} sources={state.sources} onOpenSchedule={() => setView("schedule")} /> : profile.role === "admin" && view !== "workspace" ? <>
-          {view === "parameters" ? <Parameters profile={profile} /> : <Templates profile={profile} />}
-        </> : <><div className="summary-strip" aria-label="当前概览">
+        {profile.role === "employee" ? <EmployeeWeek key={profile.key} profile={profile} sources={state.sources} /> : profile.role === "manager" ? view === "schedule" ? <ManagerSchedule key={profile.key} profile={profile} statuses={state.statuses} /> : view === "templates" ? <Templates profile={profile} /> : <ManagerRoster key={profile.key} profile={profile} statuses={state.statuses} sources={state.sources} onOpenSchedule={() => setView("schedule")} /> : profile.role === "admin" ? <Parameters profile={profile} /> : <><div className="summary-strip" aria-label="当前概览">
           <div className="summary-item"><span className="summary-label">当前身份</span><strong>{profile.label}</strong><span className="summary-meta">{roleNames[profile.role]} · ID {state.identity?.userId ?? profile.userId}</span></div>
           <div className="summary-item"><span className="summary-label">服务状态</span><strong>{state.phase === "ready" ? "运行正常" : state.phase === "error" ? "连接失败" : "正在检查"}</strong><span className="summary-meta">{state.health?.db === "sqlite" ? "SQLite · 本地演示" : "Duty Time Advice API"}</span></div>
           <div className="summary-item"><span className="summary-label">可排性状态</span><strong>{state.phase === "ready" ? activeStatuses.length : "—"}</strong><span className="summary-meta">已启用状态</span></div>
