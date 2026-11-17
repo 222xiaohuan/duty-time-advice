@@ -90,17 +90,17 @@ function App() {
 
     <div className="workspace">
       <aside className="sidebar" aria-label="主导航">
-        <div className="sidebar-section-label">排班管理</div>
+        {profile.role !== "admin" && <div className="sidebar-section-label">排班管理</div>}
         {profile.role !== "admin" && <button className={`sidebar-link ${view === "workspace" ? "sidebar-active" : ""}`} onClick={() => setView("workspace")}><CalendarDays size={17} /><span>排班时间报备</span></button>}
         {profile.role === "manager" && <><button className={`sidebar-link ${view === "schedule" ? "sidebar-active" : ""}`} onClick={() => setView("schedule")}><CalendarRange size={17} /><span>模拟排班</span></button><button className={`sidebar-link ${view === "templates" ? "sidebar-active" : ""}`} onClick={() => setView("templates")}><CalendarDays size={17} /><span>周模板</span></button></>}
-        {profile.role === "admin" && <><div className="sidebar-section-label admin-nav-label">管理设置</div><button className={`sidebar-link ${view === "parameters" ? "sidebar-active" : ""}`} onClick={() => setView("parameters")}><Settings2 size={17} /><span>组织参数</span></button></>}
+        {profile.role === "admin" && <><div className="sidebar-section-label">管理设置</div><button className={`sidebar-link ${view === "parameters" ? "sidebar-active" : ""}`} onClick={() => setView("parameters")}><Settings2 size={17} /><span>组织参数</span></button></>}
         <div className="sidebar-footer"><span className="sidebar-footer-mark">HKJC</span><span>Workforce Management</span></div>
       </aside>
 
       <main className="main-content">
         {profile.role === "admin" && <nav className="admin-mobile-nav" aria-label="管理设置"><button className={view === "parameters" ? "selected" : ""} onClick={() => setView("parameters")}>组织参数</button></nav>}
         {profile.role === "manager" && <nav className="admin-mobile-nav" aria-label="主管页面"><button className={view === "workspace" ? "selected" : ""} onClick={() => setView("workspace")}>可排性</button><button className={view === "schedule" ? "selected" : ""} onClick={() => setView("schedule")}>模拟排班</button><button className={view === "templates" ? "selected" : ""} onClick={() => setView("templates")}>周模板</button></nav>}
-        <div className="breadcrumb">排班管理 <span>/</span> {view === "parameters" ? "组织参数" : view === "templates" ? "周模板" : view === "schedule" ? "模拟排班" : "排班时间报备"}</div>
+        <div className="breadcrumb">{profile.role === "admin" ? "管理设置" : "排班管理"} <span>/</span> {view === "parameters" ? "组织参数" : view === "templates" ? "周模板" : view === "schedule" ? "模拟排班" : "排班时间报备"}</div>
         <div className="page-heading">
           <div><h1>{view === "parameters" ? "组织参数" : view === "templates" ? "周模板" : view === "schedule" ? "模拟排班" : "排班时间报备"}</h1><p>{view === "schedule" ? "主管排班" : view === "templates" ? "主管模板" : view === "workspace" ? "工作台" : "管理员设置"}</p></div>
           <div className="heading-actions">
