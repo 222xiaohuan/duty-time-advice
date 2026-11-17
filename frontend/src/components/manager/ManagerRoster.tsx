@@ -25,7 +25,7 @@ const statusColor = (code: string, statuses: StatusDictionaryItem[]) => statuses
 
 function durationLabel(startTime: string, endTime: string): string {
   const minutes = Math.max(0, Math.round((new Date(endTime).getTime() - new Date(startTime).getTime()) / 60000));
-  return `${Number((minutes / 60).toFixed(1))}小时`;
+  return `${Number((minutes / 60).toFixed(1))}h`;
 }
 
 function durationShortLabel(startTime: string, endTime: string): string {
@@ -33,7 +33,7 @@ function durationShortLabel(startTime: string, endTime: string): string {
 }
 
 function durationMinutesLabel(minutes: number): string {
-  return `${Number((minutes / 60).toFixed(1))}小时`;
+  return `${Number((minutes / 60).toFixed(1))}h`;
 }
 
 function period(mode: Mode, day: string) {

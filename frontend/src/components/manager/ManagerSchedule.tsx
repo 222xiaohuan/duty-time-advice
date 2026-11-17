@@ -22,7 +22,7 @@ function minuteOf(iso: string): number {
 }
 
 function durationLabel(minutes: number): string {
-  return `${Number((minutes / 60).toFixed(1))}小时`;
+  return `${Number((minutes / 60).toFixed(1))}h`;
 }
 
 function durationLabelFromTimes(startTime: string, endTime: string): string {
