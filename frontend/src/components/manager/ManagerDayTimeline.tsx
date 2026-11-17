@@ -11,11 +11,12 @@ export type TimelineEmployee = { id: number; empName: string; empTypeCode: strin
 export type TimelineRecord = { id: number; empId: number; businessDate: string; statusCode: string; sourceCode: string; startTime: string; endTime: string; remark: string | null; locked: number };
 export type TimelineShift = { id: number; empId: number; businessDate: string; shiftName: string; startTime: string; endTime: string; durationMinutes: number };
 type Form = { statusCode: string; allDay: boolean; startTime: string; endTime: string; endDayOffset: number; remark: string };
-type Dialog = { employee: TimelineEmployee; row: TimelineRecord | null };
+type Dialog = { employee: TimelineEmployee; day: string; row: TimelineRecord | null };
 type Segment<T> = { item: T; start: number; end: number; lane: number; continued: boolean };
-type Drag = { pointerId: number; empId: number; start: number; end: number };
+type Drag = { pointerId: number; empId: number; day: string; start: number; end: number };
 
 const hours = Array.from({ length: 13 }, (_, index) => index * 2);
+const dateWeekdays = ["周日", "周一", "周二", "周三", "周四", "周五", "周六"];
 const defaultColor = (code: string) => code === "ROSTERABLE" ? "#228b22" : "#dc2626";
 const minuteOf = (iso: string) => { const [hour, minute] = hkTime(iso).split(":").map(Number); return hour * 60 + minute; };
 const timeOf = (minute: number) => minute === 1440 ? "00:00" : `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
@@ -47,10 +48,11 @@ function segmentsFor<T extends { businessDate: string; startTime: string; endTim
   });
 }
 
-export function ManagerDayTimeline({ day, employees, records, shifts, statuses, sources, profile, chosenStatus, onStatusChange, onChanged }: {
-  day: string; employees: TimelineEmployee[]; records: TimelineRecord[]; shifts: TimelineShift[];
+export function ManagerDayTimeline({ day, days, employees, records, shifts, statuses, sources, profile, chosenStatus, onStatusChange, onChanged, addRequest, onAddRequestHandled }: {
+  day: string; days?: string[]; employees: TimelineEmployee[]; records: TimelineRecord[]; shifts: TimelineShift[];
   statuses: StatusDictionaryItem[]; sources: SourceDictionaryItem[]; profile: MockProfile;
   chosenStatus: string; onStatusChange: (statusCode: string) => void; onChanged: (message: string) => void;
+  addRequest?: { empId: number; day: string } | null; onAddRequestHandled?: () => void;
 }) {
   const activeStatuses = statuses.filter((status) => status.enabled === 1 && (status.statusCode === "ROSTERABLE" || status.statusCode === "UNROSTERABLE"));
   const [dialog, setDialog] = useState<Dialog | null>(null);
@@ -61,6 +63,7 @@ export function ManagerDayTimeline({ day, employees, records, shifts, statuses, 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const statusCode = activeStatuses.some((status) => status.statusCode === chosenStatus) ? chosenStatus : activeStatuses[0]?.statusCode ?? "";
+  const rows = days ? employees[0] ? days.map((rowDay) => ({ employee: employees[0], day: rowDay })) : [] : employees.map((employee) => ({ employee, day }));
 
   useEffect(() => {
     if (!dialog) return;
@@ -70,28 +73,33 @@ export function ManagerDayTimeline({ day, employees, records, shifts, statuses, 
     return () => window.removeEventListener("keydown", escape);
   }, [dialog, busy]);
 
-  function openNew(employee: TimelineEmployee, start = 540, end = 1020) {
-    if (employee.cutoffDays === null || dayLocked(day, employee.cutoffDays) || !statusCode) return;
+  function openNew(employee: TimelineEmployee, rowDay: string, start = 540, end = 1020) {
+    if (employee.cutoffDays === null || dayLocked(rowDay, employee.cutoffDays) || !statusCode) return;
     setError("");
     setForm({ statusCode, allDay: false, startTime: timeOf(start), endTime: timeOf(end), endDayOffset: end === 1440 ? 1 : 0, remark: "" });
-    setDialog({ employee, row: null });
+    setDialog({ employee, day: rowDay, row: null });
   }
 
-  function openExisting(employee: TimelineEmployee, row: TimelineRecord) {
+  function openExisting(employee: TimelineEmployee, rowDay: string, row: TimelineRecord) {
     setError("");
     setForm({ statusCode: row.statusCode, allDay: hkTime(row.startTime) === "00:00" && hkTime(row.endTime) === "00:00" && hkDate(row.endTime) !== row.businessDate, startTime: hkTime(row.startTime), endTime: hkTime(row.endTime), endDayOffset: hkDate(row.endTime) === row.businessDate ? 0 : 1, remark: row.remark ?? "" });
-    setDialog({ employee, row });
+    setDialog({ employee, day: rowDay, row });
   }
+
+  useEffect(() => {
+    const employee = employees.find((item) => item.id === addRequest?.empId);
+    if (employee && addRequest) { openNew(employee, addRequest.day); onAddRequestHandled?.(); }
+  }, [addRequest]);
 
   function atPointer(event: PointerEvent<HTMLDivElement>): number {
     const rect = event.currentTarget.getBoundingClientRect();
     return Math.max(0, Math.min(1440, Math.round((event.clientX - rect.left) / rect.width * 96) * 15));
   }
 
-  function pointerDown(event: PointerEvent<HTMLDivElement>, employee: TimelineEmployee) {
-    if (event.button !== 0 || busy || !statusCode || employee.cutoffDays === null || dayLocked(day, employee.cutoffDays)) return;
+  function pointerDown(event: PointerEvent<HTMLDivElement>, employee: TimelineEmployee, rowDay: string) {
+    if (event.button !== 0 || busy || !statusCode || employee.cutoffDays === null || dayLocked(rowDay, employee.cutoffDays)) return;
     const start = Math.min(1425, atPointer(event));
-    const next = { pointerId: event.pointerId, empId: employee.id, start, end: start + 15 };
+    const next = { pointerId: event.pointerId, empId: employee.id, day: rowDay, start, end: start + 15 };
     dragRef.current = next; setDrag(next);
     event.currentTarget.setPointerCapture(event.pointerId);
     event.preventDefault();
@@ -104,26 +112,26 @@ export function ManagerDayTimeline({ day, employees, records, shifts, statuses, 
     dragRef.current = next; setDrag(next);
   }
 
-  function pointerUp(event: PointerEvent<HTMLDivElement>, employee: TimelineEmployee) {
+  function pointerUp(event: PointerEvent<HTMLDivElement>, employee: TimelineEmployee, rowDay: string) {
     const current = dragRef.current;
-    if (!current || current.pointerId !== event.pointerId || current.empId !== employee.id) return;
+    if (!current || current.pointerId !== event.pointerId || current.empId !== employee.id || current.day !== rowDay) return;
     const last = atPointer(event);
     let start = Math.min(current.start, last);
     let end = Math.max(current.start, last);
     if (start === end) end = Math.min(1440, start + 15);
     if (start === 1440) { start = 1425; end = 1440; }
     dragRef.current = null; setDrag(null);
-    openNew(employee, start, end);
+    openNew(employee, rowDay, start, end);
   }
 
-  const readOnly = !dialog || dialog.employee.cutoffDays === null || dayLocked(dialog.row?.businessDate ?? day, dialog.employee.cutoffDays) || Boolean(dialog.row?.locked) || dialog.row?.sourceCode === "EXTERNAL_SYNC" || dialog.row?.sourceCode === "BULK_IMPORT";
+  const readOnly = !dialog || dialog.employee.cutoffDays === null || dayLocked(dialog.row?.businessDate ?? dialog.day, dialog.employee.cutoffDays) || Boolean(dialog.row?.locked) || dialog.row?.sourceCode === "EXTERNAL_SYNC" || dialog.row?.sourceCode === "BULK_IMPORT";
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!dialog || readOnly || busy) return;
     const values = new FormData(event.currentTarget);
     const body = {
-      empId: dialog.employee.id, businessDate: dialog.row?.businessDate ?? day,
+      empId: dialog.employee.id, businessDate: dialog.row?.businessDate ?? dialog.day,
       statusCode: String(values.get("statusCode")), startTime: form.allDay ? "00:00" : String(values.get("startTime")),
       endTime: form.allDay ? "00:00" : String(values.get("endTime")), endDayOffset: form.allDay ? 1 : Number(values.get("endDayOffset")),
       remark: String(values.get("remark") ?? "") || null,
@@ -152,30 +160,33 @@ export function ManagerDayTimeline({ day, employees, records, shifts, statuses, 
       {activeStatuses.map((status) => <button type="button" key={status.statusCode} className={statusCode === status.statusCode ? "selected" : ""} aria-pressed={statusCode === status.statusCode} onClick={() => onStatusChange(status.statusCode)}><i style={{ backgroundColor: status.colorHex ?? defaultColor(status.statusCode) }} />{status.statusName}</button>)}
     </div>
     {!activeStatuses.length && <p className="form-error">当前没有启用的可排性状态</p>}
-    <div className="manager-day-scroll"><div className="manager-day-grid">
-      <div className="manager-day-person-head">员工</div>
-      <div className="manager-day-ruler" aria-label={`${day} 00:00 至 24:00`}>
+    <div className="manager-day-scroll"><div className={`manager-day-grid ${days ? "by-date" : ""}`}>
+      <div className="manager-day-person-head">{days ? "日期" : "员工"}</div>
+      <div className="manager-day-ruler" aria-label={`${days ? `${days[0]} 至 ${days[days.length - 1]}` : day} 00:00 至 24:00`}>
         {hours.map((hour) => <span key={hour} className={hour === 0 ? "first" : hour === 24 ? "last" : ""} style={{ left: `${hour / 24 * 100}%` }}>{String(hour).padStart(2, "0")}</span>)}
       </div>
-      {employees.map((employee) => {
-        const locked = employee.cutoffDays === null || dayLocked(day, employee.cutoffDays);
+      {rows.map(({ employee, day: rowDay }) => {
+        const locked = employee.cutoffDays === null || dayLocked(rowDay, employee.cutoffDays);
         const baseline = employee.baselineRule === BaselineRule.BASE_ROSTERABLE ? "rosterable" : employee.baselineRule === BaselineRule.BASE_UNROSTERABLE ? "unrosterable" : null;
         const baselineText = baseline === "rosterable" ? "默认全部可排" : baseline === "unrosterable" ? "默认全部不可排" : null;
-        const dayRecords = segmentsFor(records.filter((row) => row.empId === employee.id), day);
-        const dayShifts = segmentsFor(shifts.filter((row) => row.empId === employee.id), day, true);
+        const dayRecords = segmentsFor(records.filter((row) => row.empId === employee.id), rowDay);
+        const dayShifts = segmentsFor(shifts.filter((row) => row.empId === employee.id), rowDay, true);
         const lanes = Math.max(1, ...dayRecords.map((segment) => segment.lane + 1));
-        return <div className="manager-day-grid-row" key={employee.id}>
-          <div className="manager-day-person"><strong>{employee.empName}</strong><small>{locked ? "只读" : `${labelOf(employeeTypes, employee.empTypeCode)} · ${labelOf(posts, employee.postCode)}`}</small><Button type="button" variant="ghost" size="icon" title={`为${employee.empName}新增时段`} aria-label={`为${employee.empName}新增时段`} disabled={locked || !statusCode} onClick={() => openNew(employee)}><Plus size={15} /></Button></div>
+        return <div className="manager-day-grid-row" key={`${employee.id}-${rowDay}`}>
+          <div className={`manager-day-person ${days ? "week-date" : ""}`}>
+            {days ? <><strong>{rowDay}<span>{dateWeekdays[new Date(`${rowDay}T00:00:00Z`).getUTCDay()]}</span></strong>{locked && <small>只读</small>}</> : <><strong>{employee.empName}</strong><small>{locked ? "只读" : `${labelOf(employeeTypes, employee.empTypeCode)} · ${labelOf(posts, employee.postCode)}`}</small></>}
+            <Button type="button" variant="ghost" size="icon" title={`为${employee.empName}在${rowDay}新增时段`} aria-label={`为${employee.empName}在${rowDay}新增时段`} disabled={locked || !statusCode} onClick={() => openNew(employee, rowDay)}><Plus size={15} /></Button>
+          </div>
           <div className={`manager-day-row-body ${locked ? "locked" : ""}`}>
-            <div className={`manager-day-track ${baseline ? `baseline-${baseline}` : ""}`} style={{ height: `${Math.max(54, lanes * 30 + 24)}px` }} onPointerDown={(event) => pointerDown(event, employee)} onPointerMove={pointerMove} onPointerUp={(event) => pointerUp(event, employee)} onPointerCancel={() => { dragRef.current = null; setDrag(null); }} aria-label={`${employee.empName} ${day} 时间轴${baselineText ? `，${baselineText}` : ""}`}>
+            <div className={`manager-day-track ${baseline ? `baseline-${baseline}` : ""}`} style={{ height: `${Math.max(54, lanes * 30 + 24)}px` }} onPointerDown={(event) => pointerDown(event, employee, rowDay)} onPointerMove={pointerMove} onPointerUp={(event) => pointerUp(event, employee, rowDay)} onPointerCancel={() => { dragRef.current = null; setDrag(null); }} aria-label={`${employee.empName} ${rowDay} 时间轴${baselineText ? `，${baselineText}` : ""}`}>
               {baselineText && <span className="manager-day-baseline-mark" aria-hidden="true">{baselineText}</span>}
               {dayRecords.map(({ item, start, end, lane, continued }) => {
                 const status = statuses.find((value) => value.statusCode === item.statusCode);
                 const color = status?.colorHex ?? defaultColor(item.statusCode);
                 const label = `${continued ? "前日延续 · " : ""}${status?.statusName ?? item.statusCode} ${hkTime(item.startTime)}–${hkDate(item.endTime) !== item.businessDate ? "次日 " : ""}${hkTime(item.endTime)}`;
-                return <button type="button" className="manager-day-bar" key={item.id} style={{ ...position(start, end), top: `${lane * 30 + 7}px`, backgroundColor: color, color: textColor(color) }} title={label} aria-label={`${employee.empName} ${label}`} onPointerDown={(event) => event.stopPropagation()} onClick={() => openExisting(employee, item)}><span>{label}</span></button>;
+                return <button type="button" className="manager-day-bar" key={item.id} style={{ ...position(start, end), top: `${lane * 30 + 7}px`, backgroundColor: color, color: textColor(color) }} title={label} aria-label={`${employee.empName} ${rowDay} ${label}`} onPointerDown={(event) => event.stopPropagation()} onClick={() => openExisting(employee, rowDay, item)}><span>{label}</span></button>;
               })}
-              {drag?.empId === employee.id && <div className="manager-day-draft" style={draftPosition(drag)} />}
+              {drag?.empId === employee.id && drag.day === rowDay && <div className="manager-day-draft" style={draftPosition(drag)} />}
             </div>
             {dayShifts.length > 0 && <div className="manager-day-shifts">{dayShifts.map(({ item, start, end, continued }) => <span key={item.id} style={position(start, end)} title={`${continued ? "前日延续 · " : ""}${item.shiftName} ${hkTime(item.startTime)}–${hkTime(item.endTime)}`}>{item.shiftName}</span>)}</div>}
           </div>
@@ -184,7 +195,7 @@ export function ManagerDayTimeline({ day, employees, records, shifts, statuses, 
     </div></div>
     {dialog && <div className="manager-day-dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setDialog(null); }}>
       <div className="manager-day-dialog" ref={dialogRef} role="dialog" aria-modal="true" aria-label={`${dialog.employee.empName} ${dialog.row ? "编辑" : "新增"}可排性时段`}>
-        <div className="manager-day-dialog-head"><div><h2>{dialog.employee.empName} · {dialog.row?.businessDate ?? day}</h2><span>{dialog.row ? "编辑可排性时段" : "新增可排性时段"}</span></div><Button type="button" variant="ghost" size="icon" title="关闭" aria-label="关闭编辑面板" disabled={busy} onClick={() => setDialog(null)}><X size={17} /></Button></div>
+        <div className="manager-day-dialog-head"><div><h2>{dialog.employee.empName} · {dialog.row?.businessDate ?? dialog.day}</h2><span>{dialog.row ? "编辑可排性时段" : "新增可排性时段"}</span></div><Button type="button" variant="ghost" size="icon" title="关闭" aria-label="关闭编辑面板" disabled={busy} onClick={() => setDialog(null)}><X size={17} /></Button></div>
         {dialog.row && <p className="manager-day-source">来源：{sources.find((source) => source.sourceCode === dialog.row?.sourceCode)?.sourceName ?? dialog.row.sourceCode}</p>}
         {readOnly && <p className="employee-readonly">该记录已锁定或来源只读</p>}
         <form onSubmit={save} className="manager-day-dialog-form">

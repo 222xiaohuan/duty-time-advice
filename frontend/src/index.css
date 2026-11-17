@@ -193,6 +193,16 @@ button { cursor: pointer; }
 .manager-view { min-width: 0; border-top: 1px solid var(--border); }
 .manager-day-list { display: flex; flex-direction: column; }
 .manager-day-row { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 14px; align-items: stretch; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.manager-person-week { display: grid; grid-template-columns: 190px minmax(0, 1fr); align-items: start; gap: 12px; min-width: 0; }
+.manager-person-list { display: flex; flex-direction: column; height: 606px; min-width: 0; margin-top: 58px; border: 1px solid #d9e2e8; background: #fff; }
+.manager-person-list-head { flex: 0 0 46px; display: flex; align-items: center; padding: 0 12px; border-bottom: 1px solid #d4dee6; background: #f0f3f7; color: #0c336a; font-size: 12px; font-weight: 700; }
+.manager-person-list-scroll { min-height: 0; overflow-y: auto; }
+.manager-person-list-item { position: relative; min-height: 86px; border-bottom: 1px solid #e0e7eb; }
+.manager-person-list-item.selected { background: #edf3f8; box-shadow: inset 3px 0 #0c336a; }
+.manager-person-choice { display: flex; flex-direction: column; justify-content: center; gap: 5px; width: 100%; min-height: 86px; padding: 10px 34px 10px 12px; border: 0; background: transparent; color: #263a4a; text-align: left; cursor: pointer; }
+.manager-person-choice strong { font-size: 12px; }
+.manager-person-choice small { color: #788590; font-size: 10px; overflow-wrap: anywhere; }
+.manager-person-list-item > button:last-child { position: absolute; top: 5px; right: 4px; width: 28px; height: 28px; }
 .manager-day-timeline-page { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .manager-day-statuses { display: flex; align-items: center; gap: 5px; padding: 12px 0 0; }
 .manager-day-statuses button { display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 0 12px; border: 1px solid #cbd6de; background: #fff; color: #455a69; font-size: 12px; }
@@ -202,6 +212,7 @@ button { cursor: pointer; }
 .manager-day-statuses i { width: 11px; height: 11px; border-radius: 50%; }
 .manager-day-scroll { max-width: 100%; overflow-x: auto; border: 1px solid #d9e2e8; }
 .manager-day-grid { display: grid; grid-template-columns: 160px minmax(900px, 1fr); min-width: 1060px; }
+.manager-day-grid.by-date { grid-template-columns: 172px minmax(760px, 1fr); min-width: 932px; }
 .manager-day-person-head, .manager-day-ruler { height: 46px; border-bottom: 1px solid #d4dee6; background: #f0f3f7; color: #0c336a; font-size: 12px; font-weight: 700; }
 .manager-day-person-head { position: sticky; left: 0; z-index: 5; display: flex; align-items: center; padding: 0 11px; border-right: 1px solid #d4dee6; }
 .manager-day-ruler { position: relative; min-width: 0; }
@@ -212,6 +223,8 @@ button { cursor: pointer; }
 .manager-day-person { position: sticky; left: 0; z-index: 4; display: flex; flex-direction: column; justify-content: center; gap: 3px; min-height: 80px; padding: 8px 10px; border-right: 1px solid #d4dee6; border-bottom: 1px solid #e0e7eb; background: #fff; }
 .manager-day-person strong { color: #263a4a; font-size: 12px; }
 .manager-day-person small { color: #788590; font-size: 10px; overflow-wrap: anywhere; }
+.manager-day-person.week-date strong { padding-right: 23px; font-size: 11px; white-space: nowrap; }
+.manager-day-person.week-date strong span { margin-left: 5px; color: #788590; font-weight: 500; }
 .manager-day-person button { position: absolute; right: 3px; top: 3px; width: 26px; height: 26px; }
 .manager-day-row-body { min-height: 80px; border-bottom: 1px solid #e0e7eb; background: #fff; }
 .manager-day-row-body.locked { background: #f6f8f9; }
@@ -370,6 +383,8 @@ button { cursor: pointer; }
 }
 
 @media (max-width: 720px) {
+  .manager-person-week { grid-template-columns: minmax(0, 1fr); }
+  .manager-person-list { height: 178px; margin-top: 10px; }
   .topbar { height: 60px; padding: 0 14px; }
   .brand-mark { width: 30px; height: 30px; }
   .brand-text span { font-size: 13px; }
@@ -438,5 +453,6 @@ button { cursor: pointer; }
   .schedule-form, .schedule-shift-list { padding: 13px; }
   .schedule-marker-detail { right: 8px; bottom: 8px; width: calc(100vw - 16px); }
   .manager-day-grid { grid-template-columns: 130px minmax(840px, 1fr); min-width: 970px; }
+  .manager-day-grid.by-date { grid-template-columns: 130px minmax(840px, 1fr); min-width: 970px; }
   .manager-day-dialog { padding: 14px; }
 }

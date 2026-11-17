@@ -29,7 +29,7 @@ function moveMonth(day: string, offset: number): string {
 function period(mode: Mode, day: string) {
   if (mode === "month") return { from: monthStart(day), to: monthEnd(day) };
   if (mode === "day") return { from: day, to: day };
-  const from = mondayOf(day);
+  const from = mode === "person" ? addDays(day, -new Date(`${day}T00:00:00Z`).getUTCDay()) : mondayOf(day);
   return { from, to: addDays(from, 6) };
 }
 
@@ -57,6 +57,7 @@ export function ManagerRoster({ profile, statuses, sources, onOpenSchedule }: { 
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
   const [recordForm, setRecordForm] = useState<RecordForm>(newRecord);
   const [dayStatusCode, setDayStatusCode] = useState("ROSTERABLE");
+  const [personAddRequest, setPersonAddRequest] = useState<{ empId: number; day: string } | null>(null);
   const [editingRecord, setEditingRecord] = useState<number | null>(null);
   const [generation, setGeneration] = useState<GenerateResult | null>(null);
   const [loading, setLoading] = useState(true);
@@ -82,7 +83,7 @@ export function ManagerRoster({ profile, statuses, sources, onOpenSchedule }: { 
     let active = true;
     setLoading(true);
     Promise.all([
-      apiGet<RecordRow[]>(`/rosterability-records?orgId=${directory.orgId}&from=${mode === "day" ? addDays(range.from, -1) : range.from}&to=${range.to}`, profile),
+      apiGet<RecordRow[]>(`/rosterability-records?orgId=${directory.orgId}&from=${mode === "day" || mode === "person" ? addDays(range.from, -1) : range.from}&to=${range.to}`, profile),
       apiGet<ShiftRow[]>(`/mock-shifts?orgId=${directory.orgId}`, profile),
     ]).then(([nextRecords, nextShifts]) => {
       if (active) { setRecords(nextRecords); setShifts(nextShifts); setLoading(false); }
@@ -119,7 +120,7 @@ export function ManagerRoster({ profile, statuses, sources, onOpenSchedule }: { 
   }
   function navigate(direction: number) {
     const next = mode === "month" ? moveMonth(anchor, direction) : addDays(anchor, direction * (mode === "day" ? 1 : 7));
-    setAnchor(next);
+    setAnchor(next); setPersonAddRequest(null);
     setSelection((current) => current ? { ...current, day: next } : current);
     setEditingRecord(null); setRecordForm(newRecord());
   }
@@ -145,7 +146,7 @@ export function ManagerRoster({ profile, statuses, sources, onOpenSchedule }: { 
     setBusy(true); setError(""); setNotice("");
     try {
       const result = await apiPost<GenerateResult>("/template-generation", profile, {});
-      setGeneration(result); setMode("week"); setAnchor(result.startMonday);
+      setGeneration(result); setMode("week"); setAnchor(result.startMonday); setPersonAddRequest(null);
       setSelection((current) => current ? { ...current, day: result.startMonday } : current);
       setEditingRecord(null); setRecordForm(newRecord());
       setRefresh((value) => value + 1);
@@ -176,12 +177,12 @@ export function ManagerRoster({ profile, statuses, sources, onOpenSchedule }: { 
 
   return <div className="manager-page">
     <div className="manager-toolbar">
-      <div className="manager-tabs" role="tablist" aria-label="日历视图">{modes.map((item) => <button type="button" role="tab" aria-selected={mode === item.value} className={mode === item.value ? "selected" : ""} key={item.value} onClick={() => setMode(item.value)}>{item.label}</button>)}</div>
+      <div className="manager-tabs" role="tablist" aria-label="日历视图">{modes.map((item) => <button type="button" role="tab" aria-selected={mode === item.value} className={mode === item.value ? "selected" : ""} key={item.value} onClick={() => { setMode(item.value); setPersonAddRequest(null); if (item.value === "person") setEmployeeFilter(""); }}>{item.label}</button>)}</div>
       {mode !== "person" && <Button type="button" onClick={() => void generate()} disabled={busy || !directory}><CalendarDays size={16} />生成可排时段</Button>}
     </div>
     <div className="manager-filters">
       <label>组织<select value={directory?.orgId ?? ""} disabled><option value={directory?.orgId ?? ""}>{directory?.orgName ?? "加载中"}</option></select></label>
-      <label>员工<select value={employeeFilter} onChange={(event) => setEmployeeFilter(event.target.value)}><option value="">全部员工</option>{directory?.employees.map((employee) => <option value={employee.id} key={employee.id}>{employee.empName}</option>)}</select></label>
+      {mode !== "person" && <label>员工<select value={employeeFilter} onChange={(event) => setEmployeeFilter(event.target.value)}><option value="">全部员工</option>{directory?.employees.map((employee) => <option value={employee.id} key={employee.id}>{employee.empName}</option>)}</select></label>}
       <label>员工类型<select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="">全部类型</option>{employeeTypes.map((type) => <option value={type.code} key={type.code}>{type.name}</option>)}</select></label>
       <label>岗位<select value={postFilter} onChange={(event) => setPostFilter(event.target.value)}><option value="">全部岗位</option>{posts.map((post) => <option value={post.code} key={post.code}>{post.name}</option>)}</select></label>
       <label>状态<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="">全部状态</option>{statusOptions.map((status) => <option value={status.statusCode} key={status.statusCode}>{status.statusName}</option>)}</select></label>
@@ -191,9 +192,9 @@ export function ManagerRoster({ profile, statuses, sources, onOpenSchedule }: { 
     {error && <p className="form-error" role="alert">{error}</p>}{notice && <p className="form-success" role="status">{notice}</p>}
     {generation && <section className="manager-generation" aria-label="生成结果"><div className="admin-intro"><h2>生成结果</h2><span>从 {generation.startMonday} 开始 · {generation.employeeCount} 名员工</span></div><div className="manager-summary">{Object.entries(generation.summary).map(([key, count]) => <div key={key}><strong>{count}</strong><span>{key === "created" ? "新增" : skipLabels[key === "shiftConflict" ? "SHIFT_CONFLICT" : key === "noParam" ? "NO_PARAM" : key === "noTemplate" ? "NO_TEMPLATE" : key === "statusDisabled" ? "STATUS_DISABLED" : key.toUpperCase()]}</span></div>)}</div>{generation.skipped.length > 0 && <details><summary>逐项跳过原因（{generation.skipped.length}）</summary><div className="manager-skip-list">{generation.skipped.map((row, index) => <div key={`${row.empId}-${row.businessDate}-${index}`}><strong>{directory?.employees.find((employee) => employee.id === row.empId)?.empName ?? `员工 ${row.empId}`}</strong><span>{row.businessDate ?? "—"} · {skipLabels[row.reason] ?? row.reason} · {row.message}</span></div>)}</div></details>}</section>}
     <section className="manager-view" aria-label="经理日历">
-      {loading ? <div className="employee-loading">正在加载可排性记录和班次</div> : employees.length === 0 ? <p className="manager-no-data">当前筛选下没有员工</p> : mode === "day" ? <ManagerDayTimeline key={anchor} day={anchor} employees={employees} records={shownRecords} shifts={shownShifts} statuses={statuses} sources={sources} profile={profile} chosenStatus={dayStatusCode} onStatusChange={setDayStatusCode} onChanged={(message) => { setNotice(message); setRefresh((value) => value + 1); }} /> : mode === "month" ? <div className="manager-month">{weekdays.map((name) => <strong key={name}>{name}</strong>)}{monthDays.map(monthCell)}</div> : <div className="manager-week-scroll"><div className="manager-week-grid"><div className="manager-week-head">员工</div>{weekDays.map((day, index) => <div className="manager-week-head" key={day}>{weekdays[index]}<small>{shortDay(day)}</small></div>)}{(mode === "person" ? singleEmployee ? [singleEmployee] : [] : employees).map((employee) => <div className="manager-week-row" key={employee.id}><div className="manager-week-person"><strong>{employee.empName}</strong><small>{labelOf(employeeTypes, employee.empTypeCode)} · {labelOf(posts, employee.postCode)}</small></div>{weekDays.map((day) => cell(employee.id, day))}</div>)}</div></div>}
+      {loading ? <div className="employee-loading">正在加载可排性记录和班次</div> : employees.length === 0 ? <p className="manager-no-data">当前筛选下没有员工</p> : mode === "day" ? <ManagerDayTimeline key={anchor} day={anchor} employees={employees} records={shownRecords} shifts={shownShifts} statuses={statuses} sources={sources} profile={profile} chosenStatus={dayStatusCode} onStatusChange={setDayStatusCode} onChanged={(message) => { setNotice(message); setRefresh((value) => value + 1); }} /> : mode === "person" && singleEmployee ? <div className="manager-person-week"><aside className="manager-person-list" aria-label="员工列表"><div className="manager-person-list-head">员工</div><div className="manager-person-list-scroll">{employees.map((employee) => { const addDay = weekDays.find((value) => employee.cutoffDays !== null && !dayLocked(value, employee.cutoffDays)); return <div className={`manager-person-list-item ${singleEmployee.id === employee.id ? "selected" : ""}`} key={employee.id}><button type="button" className="manager-person-choice" aria-pressed={singleEmployee.id === employee.id} onClick={() => { setSelection({ empId: employee.id, day: selection?.day && weekDays.includes(selection.day) ? selection.day : anchor }); setPersonAddRequest(null); }}><strong>{employee.empName}</strong><small>{labelOf(employeeTypes, employee.empTypeCode)} · {labelOf(posts, employee.postCode)}</small></button><Button type="button" variant="ghost" size="icon" title={`为${employee.empName}新增时段`} aria-label={`为${employee.empName}新增时段`} disabled={!addDay} onClick={() => { if (addDay) { setSelection({ empId: employee.id, day: addDay }); setPersonAddRequest({ empId: employee.id, day: addDay }); } }}><Plus size={16} /></Button></div>; })}</div></aside><ManagerDayTimeline key={`${range.from}-${singleEmployee.id}`} day={anchor} days={weekDays} employees={[singleEmployee]} records={shownRecords} shifts={shownShifts} statuses={statuses} sources={sources} profile={profile} chosenStatus={dayStatusCode} onStatusChange={setDayStatusCode} addRequest={personAddRequest} onAddRequestHandled={() => setPersonAddRequest(null)} onChanged={(message) => { setNotice(message); setPersonAddRequest(null); setRefresh((value) => value + 1); }} /></div> : mode === "month" ? <div className="manager-month">{weekdays.map((name) => <strong key={name}>{name}</strong>)}{monthDays.map(monthCell)}</div> : <div className="manager-week-scroll"><div className="manager-week-grid"><div className="manager-week-head">员工</div>{weekDays.map((day, index) => <div className="manager-week-head" key={day}>{weekdays[index]}<small>{shortDay(day)}</small></div>)}{employees.map((employee) => <div className="manager-week-row" key={employee.id}><div className="manager-week-person"><strong>{employee.empName}</strong><small>{labelOf(employeeTypes, employee.empTypeCode)} · {labelOf(posts, employee.postCode)}</small></div>{weekDays.map((day) => cell(employee.id, day))}</div>)}</div></div>}
     </section>
-    {mode !== "day" && <section id="manager-detail" className="manager-detail"><div className="admin-intro"><h2>{selectedEmployee ? `${selectedEmployee.empName} · ${selection?.day}` : "员工详情"}</h2><span>{locked ? "可排性记录只读" : "可维护可排性记录"}</span></div>{selection && selectedEmployee && <div className="manager-detail-grid">
+    {mode !== "day" && mode !== "person" && <section id="manager-detail" className="manager-detail"><div className="admin-intro"><h2>{selectedEmployee ? `${selectedEmployee.empName} · ${selection?.day}` : "员工详情"}</h2><span>{locked ? "可排性记录只读" : "可维护可排性记录"}</span></div>{selection && selectedEmployee && <div className="manager-detail-grid">
       <div className="manager-editor">
         <div className="manager-editor-head"><h3>可排性记录</h3><Button type="button" variant="outline" size="sm" onClick={() => { setEditingRecord(null); setRecordForm(newRecord()); }}><Plus size={14} />新增</Button></div>
         <div className="manager-entry-list">{selectedRecords.map((row) => <div key={row.id}>
