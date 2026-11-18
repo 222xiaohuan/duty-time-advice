@@ -1,7 +1,7 @@
 import { bad, isEmployeeType, parseDate, parseFlag, parseId, parseTime } from "./validation";
 import { DtaRosterabilityStatus, POST_CODES } from "../types/enums";
 
-type TemplateFields = { templateName: string; nameI18n: string | null; startDate: string; endDate: string | null; enabled: number };
+type TemplateFields = { templateName: string; description?: string | null; nameI18n: string | null; startDate: string; endDate: string | null; enabled: number };
 type ItemFields = { weekday: number; statusCode: DtaRosterabilityStatus; startTime: string; endTime: string; endDayOffset: number; remark: string | null; siteCode: string | null };
 type ConditionFields = { priority: number; orgId: number | null; empTypeCode: string | null; postCode: string | null };
 
@@ -18,12 +18,13 @@ function optionalText(value: unknown, field: string, max: number): string | null
 
 export function templateFields(body: Record<string, unknown>, current?: TemplateFields): TemplateFields {
   const templateName = text(body.templateName ?? current?.templateName, "templateName", 100);
+  const description = optionalText(body.description === undefined ? current?.description : body.description, "description", 500);
   const nameI18n = optionalText(body.nameI18n === undefined ? current?.nameI18n : body.nameI18n, "nameI18n", 200);
   const startDate = parseDate(body.startDate ?? current?.startDate, "startDate");
   const endDate = body.endDate === undefined ? current?.endDate ?? null : body.endDate === null ? null : parseDate(body.endDate, "endDate");
   if (endDate !== null && endDate < startDate) bad("endDate 不得早于 startDate");
   const enabled = parseFlag(body.enabled, "enabled", current?.enabled ?? 1);
-  return { templateName, nameI18n, startDate, endDate, enabled };
+  return { templateName, description, nameI18n, startDate, endDate, enabled };
 }
 
 export function itemFields(body: Record<string, unknown>, current?: ItemFields): ItemFields {

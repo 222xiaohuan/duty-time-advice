@@ -26,14 +26,14 @@ function selectTemplate(templates: Template[], conditions: Condition[], employee
   return candidates[0]?.template ?? null;
 }
 
-export async function generateForManager(orgId: number, managerId: number, now: Date = new Date()) {
+export async function generateForManager(orgId: number, managerId: number, now: Date = new Date(), templateId?: number) {
   const org = await prisma.dtaOrg.findFirst({ where: { id: orgId, tenantId: TENANT_ID, isDeleted: 0 } });
   if (!org) bad("管辖组织不存在");
   const startMonday = hkNow(now).startOf("week").plus({ weeks: 1 }).toISODate()!;
   const [employees, params, templates, conditions, items, statuses] = await Promise.all([
     prisma.dtaEmployee.findMany({ where: { tenantId: TENANT_ID, orgId, isDeleted: 0 }, orderBy: { id: "asc" } }),
     prisma.dtaParamGroup.findMany({ where: { tenantId: TENANT_ID, orgId, isDeleted: 0 } }),
-    prisma.dtaTemplate.findMany({ where: { tenantId: TENANT_ID, enabled: 1, isDeleted: 0 } }),
+    prisma.dtaTemplate.findMany({ where: { tenantId: TENANT_ID, enabled: 1, isDeleted: 0, ...(templateId === undefined ? {} : { id: templateId }) } }),
     prisma.dtaTemplateCondition.findMany({ where: { tenantId: TENANT_ID, isDeleted: 0 } }),
     prisma.dtaTemplateItem.findMany({ where: { tenantId: TENANT_ID, isDeleted: 0 } }),
     prisma.dtaRosterabilityStatusDict.findMany({ where: { tenantId: TENANT_ID, enabled: 1, isDeleted: 0 } }),

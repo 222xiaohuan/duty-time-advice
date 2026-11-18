@@ -218,6 +218,7 @@ model DtaTemplate {
   id           Int      @id @default(autoincrement())
   tenantId     Int      @map("tenant_id")
   templateName String   @map("template_name")
+  description  String?
   nameI18n     String?  @map("name_i18n")
   startDate    String   @map("start_date") // "YYYY-MM-DD"
   endDate      String?  @map("end_date") // "YYYY-MM-DD"

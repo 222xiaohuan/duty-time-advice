@@ -41,8 +41,9 @@ describe("T003 模板维护与经理生成", () => {
   let itemId: number;
 
   it("管理员和主管可维护模板、跨午夜明细和条件；员工不能访问", async () => {
-    const created = await request(app).post("/api/templates").set(admin).send({ templateName: "夜班模板", startDate: "2026-01-01", enabled: 1 });
+    const created = await request(app).post("/api/templates").set(admin).send({ templateName: "夜班模板", description: "跨午夜夜班规则", startDate: "2026-01-01", enabled: 1 });
     expect(created.status).toBe(200);
+    expect(created.body.data.description).toBe("跨午夜夜班规则");
     templateId = created.body.data.id;
     const item = await request(app).post(`/api/templates/${templateId}/items`).set(admin).send({ weekday: 1, statusCode: "ROSTERABLE", startTime: "22:00", endTime: "02:00", endDayOffset: 1 });
     expect(item.status).toBe(200);
@@ -66,6 +67,7 @@ describe("T003 模板维护与经理生成", () => {
   it("只接受经理触发，并按组织隔离", async () => {
     expect((await request(app).post("/api/template-generation").set(admin).send({})).status).toBe(403);
     expect((await request(app).post("/api/template-generation").set({ ...manager1, "x-mock-org-id": "2" }).send({})).status).toBe(403);
+    expect((await request(app).post("/api/template-generation").set(manager1).send({ templateId: 999999 })).status).toBe(404);
     const otherOrg = await generateForManager(2, 9102, now);
     expect(otherOrg.summary.created).toBe(0);
     expect(otherOrg.skipped.every((row) => row.empId === 2 || row.empId === 102)).toBe(true);

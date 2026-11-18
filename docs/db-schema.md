@@ -200,6 +200,7 @@ Demo 不增加班组、职级或自定义字段。
 | id | int | 主键自增 |
 | tenant_id | int | 租户 ID |
 | template_name | text(100) | 模板名称 |
+| description | text(500) | 模板描述，可为 null |
 | name_i18n | text(200) | 多语言占位 |
 | start_date | text(YYYY-MM-DD) | 生效日期 |
 | end_date | text(YYYY-MM-DD) | 失效日期，可为 null |
