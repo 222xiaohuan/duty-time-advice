@@ -18,7 +18,9 @@ export type TemplateTimelineItem = {
 type Form = { statusCode: string; allDay: boolean; startTime: string; endTime: string; endDayOffset: number; remark: string };
 type Dialog = { weekday: number; row: TemplateTimelineItem | null };
 type Drag = { pointerId: number; weekday: number; start: number; end: number };
-type Segment = { item: TemplateTimelineItem; rowWeekday: number; start: number; end: number; lane: number; continued: boolean };
+type Resize = { pointerId: number; itemId: number; edge: "start" | "end"; continued: boolean };
+type ResizePreview = { itemId: number; startTime: string; endTime: string };
+type Segment = { item: TemplateTimelineItem; start: number; end: number; lane: number; continued: boolean };
 
 const weekdays = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 const hours = Array.from({ length: 13 }, (_, index) => index * 2);
@@ -42,10 +44,10 @@ function segmentsFor(items: TemplateTimelineItem[], rowWeekday: number): Segment
     if (item.weekday === rowWeekday) {
       const start = minuteOf(item.startTime);
       const dayEnd = item.endDayOffset ? 1440 : end;
-      return dayEnd > start || (start === dayEnd && !item.endDayOffset) ? [{ item, rowWeekday, start, end: dayEnd, continued: false }] : [];
+      return dayEnd > start || (start === dayEnd && !item.endDayOffset) ? [{ item, start, end: dayEnd, continued: false }] : [];
     }
     if (item.endDayOffset && nextWeekday(item.weekday) === rowWeekday && end > 0) {
-      return [{ item, rowWeekday, start: 0, end, continued: true }];
+      return [{ item, start: 0, end, continued: true }];
     }
     return [];
   }).sort((a, b) => a.start - b.start || a.end - b.end);
@@ -56,6 +58,21 @@ function segmentsFor(items: TemplateTimelineItem[], rowWeekday: number): Segment
     laneEnds[lane] = segment.end;
     return { ...segment, lane };
   });
+}
+
+function daySegments(item: Pick<TemplateTimelineItem, "weekday" | "startTime" | "endTime" | "endDayOffset">) {
+  const start = minuteOf(item.startTime);
+  const end = minuteOf(item.endTime);
+  if (item.endDayOffset === 0) return [{ weekday: item.weekday, start, end }];
+  return [
+    { weekday: item.weekday, start, end: 1440 },
+    { weekday: nextWeekday(item.weekday), start: 0, end },
+  ].filter((segment) => segment.end > segment.start);
+}
+
+function overlaps(items: TemplateTimelineItem[], candidate: Pick<TemplateTimelineItem, "weekday" | "startTime" | "endTime" | "endDayOffset">, excludedId?: number) {
+  const candidateSegments = daySegments(candidate);
+  return items.filter((item) => item.id !== excludedId).some((item) => daySegments(item).some((existing) => candidateSegments.some((next) => next.weekday === existing.weekday && next.start < existing.end && existing.start < next.end)));
 }
 
 export function TemplateWeekTimeline({ templateId, items, statuses, profile, onChanged }: {
@@ -70,7 +87,9 @@ export function TemplateWeekTimeline({ templateId, items, statuses, profile, onC
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [form, setForm] = useState<Form>({ statusCode: chosenStatus, allDay: false, startTime: "09:00", endTime: "17:00", endDayOffset: 0, remark: "" });
   const [drag, setDrag] = useState<Drag | null>(null);
+  const [resizePreview, setResizePreview] = useState<ResizePreview | null>(null);
   const dragRef = useRef<Drag | null>(null);
+  const resizeRef = useRef<Resize | null>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -100,8 +119,10 @@ export function TemplateWeekTimeline({ templateId, items, statuses, profile, onC
     setDialog({ weekday: row.weekday, row });
   }
 
-  function atPointer(event: PointerEvent<HTMLDivElement>): number {
-    const rect = event.currentTarget.getBoundingClientRect();
+  function atPointer(event: PointerEvent<HTMLElement>): number {
+    const track = event.currentTarget.closest(".manager-day-track") as HTMLElement | null;
+    const rect = track?.getBoundingClientRect();
+    if (!rect || rect.width === 0) return 0;
     return Math.max(0, Math.min(1440, Math.round((event.clientX - rect.left) / rect.width * 96) * 15));
   }
 
@@ -130,6 +151,52 @@ export function TemplateWeekTimeline({ templateId, items, statuses, profile, onC
     dragRef.current = null; setDrag(null); openNew(weekday, start, end);
   }
 
+  function resizeStart(event: PointerEvent<HTMLSpanElement>, item: TemplateTimelineItem, edge: "start" | "end", continued: boolean) {
+    if (event.button !== 0 || busy) return;
+    const next = { pointerId: event.pointerId, itemId: item.id, edge, continued };
+    resizeRef.current = next; setResizePreview({ itemId: item.id, startTime: item.startTime, endTime: item.endTime });
+    event.currentTarget.setPointerCapture(event.pointerId); event.stopPropagation(); event.preventDefault();
+  }
+
+  function resizeMove(event: PointerEvent<HTMLSpanElement>) {
+    const current = resizeRef.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    const item = items.find((row) => row.id === current.itemId);
+    if (!item) return;
+    const minute = atPointer(event);
+    const start = minuteOf(item.startTime);
+    const end = minuteOf(item.endTime);
+    const next = current.edge === "start"
+      ? { startTime: timeOf(Math.min(item.endDayOffset ? 1425 : Math.max(0, end - 15), minute)), endTime: item.endTime }
+      : { startTime: item.startTime, endTime: timeOf(Math.max(current.continued ? 0 : start + 15, minute)) };
+    setResizePreview({ itemId: item.id, ...next });
+  }
+
+  async function resizeEnd(event: PointerEvent<HTMLSpanElement>) {
+    const current = resizeRef.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    const item = items.find((row) => row.id === current.itemId);
+    const preview = resizePreview;
+    resizeRef.current = null; setResizePreview(null); event.stopPropagation();
+    if (!item || !preview || (preview.startTime === item.startTime && preview.endTime === item.endTime)) return;
+    const candidate = { ...item, startTime: preview.startTime, endTime: preview.endTime };
+    if (overlaps(items, candidate, item.id)) { setError("同一星期的模板可排性时间段不能重叠，请修改时间或删除已有时段后再添加。"); return; }
+    setBusy(true); setError("");
+    try {
+      await apiPatch(`/templates/${templateId}/items/${item.id}`, profile, { weekday: item.weekday, statusCode: item.statusCode, startTime: preview.startTime, endTime: preview.endTime, endDayOffset: item.endDayOffset, remark: item.remark });
+      onChanged("模板可排性时间段已调整");
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "操作失败"); }
+    finally { setBusy(false); }
+  }
+
+  async function removeQuick(item: TemplateTimelineItem) {
+    if (busy || !window.confirm("删除这条模板可排性时段？")) return;
+    setBusy(true); setError("");
+    try { await apiDelete(`/templates/${templateId}/items/${item.id}`, profile); onChanged("模板可排性时段已删除"); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "操作失败"); }
+    finally { setBusy(false); }
+  }
+
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!dialog || busy) return;
@@ -142,6 +209,7 @@ export function TemplateWeekTimeline({ templateId, items, statuses, profile, onC
       endDayOffset: form.allDay ? 1 : Number(values.get("endDayOffset")),
       remark: String(values.get("remark") ?? "") || null,
     };
+    if (overlaps(items, body, dialog.row?.id)) { setError("同一星期的模板可排性时间段不能重叠，请修改时间或删除已有时段后再添加。"); return; }
     setBusy(true); setError("");
     try {
       if (dialog.row) await apiPatch(`/templates/${templateId}/items/${dialog.row.id}`, profile, body);
@@ -169,16 +237,22 @@ export function TemplateWeekTimeline({ templateId, items, statuses, profile, onC
       <div className="manager-day-ruler" aria-label="周模板 00:00 至 24:00">{hours.map((hour) => <span key={hour} className={hour === 0 ? "first" : hour === 24 ? "last" : ""} style={{ left: `${hour / 24 * 100}%` }}>{String(hour).padStart(2, "0")}</span>)}</div>
       {weekdays.map((day, index) => {
         const weekday = index + 1;
-        const daySegments = segmentsFor(items, weekday);
+        const displayItems = resizePreview ? items.map((item) => item.id === resizePreview.itemId ? { ...item, startTime: resizePreview.startTime, endTime: resizePreview.endTime } : item) : items;
+        const daySegments = segmentsFor(displayItems, weekday);
         const lanes = Math.max(1, ...daySegments.map((segment) => segment.lane + 1));
         return <div className="manager-day-grid-row" key={day}>
           <div className="manager-day-person week-date"><strong>{day}</strong><Button type="button" variant="ghost" size="icon" title={`为${day}新增时段`} aria-label={`为${day}新增时段`} disabled={!chosenStatus} onClick={() => openNew(weekday)}><Plus size={16} /></Button></div>
-          <div className="manager-day-row-body"><div className="manager-day-track" style={{ height: `${Math.max(80, lanes * 30 + 25)}px` }} onPointerDown={(event) => pointerDown(event, weekday)} onPointerMove={pointerMove} onPointerUp={(event) => pointerUp(event, weekday)} onPointerCancel={() => { dragRef.current = null; setDrag(null); }} aria-label={`${day} 模板可排性时间轴`}>
+          <div className="manager-day-row-body"><div className="manager-day-track" style={{ height: `${Math.max(56, lanes * 24 + 16)}px` }} onPointerDown={(event) => pointerDown(event, weekday)} onPointerMove={pointerMove} onPointerUp={(event) => pointerUp(event, weekday)} onPointerCancel={() => { dragRef.current = null; setDrag(null); }} aria-label={`${day} 模板可排性时间轴`}>
             {daySegments.map(({ item, start, end, lane, continued }) => {
               const status = statuses.find((value) => value.statusCode === item.statusCode);
               const color = status?.colorHex ?? fallbackColor(item.statusCode);
               const label = `${continued ? "前日延续 · " : ""}${status?.statusName ?? item.statusCode} ${item.startTime}–${item.endDayOffset ? "次日 " : ""}${item.endTime}`;
-              return <button type="button" className="manager-day-bar" key={`${item.id}-${continued ? "continuation" : "start"}`} style={{ ...position(start, end), top: `${lane * 30 + 7}px`, backgroundColor: color, color: textColor(color) }} title={`${label}${item.remark ? ` · ${item.remark}` : ""}`} aria-label={`${day} ${label}`} onPointerDown={(event) => event.stopPropagation()} onClick={() => openExisting(item)}><span>{label}</span></button>;
+              return <div className="manager-day-bar template-time-bar" key={`${item.id}-${continued ? "continuation" : "start"}`} style={{ ...position(start, end), top: `${lane * 24 + 5}px`, backgroundColor: color, color: textColor(color) }} title={`${label}${item.remark ? ` · ${item.remark}` : ""}`} role="button" tabIndex={0} aria-label={`${day} ${label}`} onPointerDown={(event) => event.stopPropagation()} onClick={() => openExisting(item)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") openExisting(item); }}>
+                <span>{label}</span>
+                {!continued && <button type="button" className="template-bar-delete" title="删除此时段" aria-label="删除此时段" disabled={busy} onPointerDown={(event) => event.stopPropagation()} onClick={(event) => { event.stopPropagation(); void removeQuick(item); }}>×</button>}
+                {!continued && <span className="template-bar-handle template-bar-handle-start" title="拖拽调整开始时间" role="presentation" onPointerDown={(event) => resizeStart(event, item, "start", false)} onPointerMove={resizeMove} onPointerUp={resizeEnd} onClick={(event) => event.stopPropagation()} />}
+                {(!continued && !item.endDayOffset || continued) && <span className="template-bar-handle template-bar-handle-end" title="拖拽调整结束时间" role="presentation" onPointerDown={(event) => resizeStart(event, item, "end", continued)} onPointerMove={resizeMove} onPointerUp={resizeEnd} onClick={(event) => event.stopPropagation()} />}
+              </div>;
             })}
             {drag?.weekday === weekday && <div className="manager-day-draft" style={draftPosition(drag)} />}
           </div></div>

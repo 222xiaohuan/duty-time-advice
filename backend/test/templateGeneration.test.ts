@@ -50,6 +50,9 @@ describe("T003 模板维护与经理生成", () => {
     itemId = item.body.data.id;
     const conflictItem = await request(app).post(`/api/templates/${templateId}/items`).set(admin).send({ weekday: 3, statusCode: "UNROSTERABLE", startTime: "09:00", endTime: "12:00", endDayOffset: 0 });
     expect(conflictItem.status).toBe(200);
+    const overlapItem = await request(app).post(`/api/templates/${templateId}/items`).set(admin).send({ weekday: 1, statusCode: "UNROSTERABLE", startTime: "23:00", endTime: "01:00", endDayOffset: 1 });
+    expect(overlapItem.status).toBe(400);
+    expect(overlapItem.body.msg).toContain("时间段不能重叠");
     const condition = await request(app).post(`/api/templates/${templateId}/conditions`).set(admin).send({ priority: 1, orgId: 1, empTypeCode: "FULL_TIME", postCode: "BETTING_SERVICE" });
     expect(condition.status).toBe(200);
     const read = await request(app).get(`/api/templates/${templateId}`).set(admin);

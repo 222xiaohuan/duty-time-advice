@@ -36,6 +36,28 @@ async function checkItemStatus(statusCode: string): Promise<void> {
   if (!status) bad("该可排性状态未启用");
 }
 
+type ItemTimeFields = { weekday: number; startTime: string; endTime: string; endDayOffset: number };
+type DaySegment = { weekday: number; start: number; end: number };
+
+function itemSegments(item: ItemTimeFields): DaySegment[] {
+  const [startHour, startMinute] = item.startTime.split(":").map(Number);
+  const [endHour, endMinute] = item.endTime.split(":").map(Number);
+  const start = startHour * 60 + startMinute;
+  const end = endHour * 60 + endMinute;
+  if (item.endDayOffset === 0) return [{ weekday: item.weekday, start, end }];
+  return [
+    { weekday: item.weekday, start, end: 1440 },
+    { weekday: item.weekday === 7 ? 1 : item.weekday + 1, start: 0, end },
+  ].filter((segment) => segment.end > segment.start);
+}
+
+async function checkItemOverlap(templateId: number, fields: ItemTimeFields, excludeId?: number): Promise<void> {
+  const existing = await prisma.dtaTemplateItem.findMany({ where: { tenantId: TENANT_ID, templateId, isDeleted: 0, ...(excludeId ? { id: { not: excludeId } } : {}) }, select: { weekday: true, startTime: true, endTime: true, endDayOffset: true } });
+  const candidateSegments = itemSegments(fields);
+  const overlaps = existing.some((item) => itemSegments(item).some((existingSegment) => candidateSegments.some((candidate) => candidate.weekday === existingSegment.weekday && candidate.start < existingSegment.end && existingSegment.start < candidate.end)));
+  if (overlaps) bad("同一星期的模板可排性时间段不能重叠，请修改时间或删除已有时段后再添加。");
+}
+
 async function checkConditionOrg(orgId: number | null): Promise<void> {
   if (orgId === null) return;
   const org = await prisma.dtaOrg.findFirst({ where: { id: orgId, tenantId: TENANT_ID, isDeleted: 0 } });
@@ -97,6 +119,7 @@ templatesRouter.post("/:id/items", requireRole("admin", "manager"), async (req, 
     const template = await templateOf(parseId(req.params.id, "id"));
     const fields = itemFields(bodyOf(req));
     await checkItemStatus(fields.statusCode);
+    await checkItemOverlap(template.id, fields);
     const row = await prisma.dtaTemplateItem.create({ data: { tenantId: TENANT_ID, templateId: template.id, ...fields, createdBy: req.identity!.userId, updatedBy: req.identity!.userId } });
     ok(res, row, "模板明细已创建");
   } catch (error) { next(error); }
@@ -108,6 +131,7 @@ templatesRouter.patch("/:id/items/:itemId", requireRole("admin", "manager"), asy
     const current = await itemOf(template.id, parseId(req.params.itemId, "itemId"));
     const fields = itemFields(bodyOf(req), current);
     await checkItemStatus(fields.statusCode);
+    await checkItemOverlap(template.id, fields, current.id);
     const row = await prisma.dtaTemplateItem.update({ where: { id: current.id }, data: { ...fields, updatedBy: req.identity!.userId } });
     ok(res, row, "模板明细已更新");
   } catch (error) { next(error); }
