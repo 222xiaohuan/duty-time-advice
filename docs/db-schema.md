@@ -296,6 +296,8 @@ Demo 不增加班组、职级或自定义字段。
 
 创建或修改 `UNROSTERABLE` 记录时，若同一员工同一 `business_date` 存在 `duration_minutes > 0` 的未删除班次，必须禁止保存。
 
+新增或修改 `dta_mock_shift` 时，若班次 `duration_minutes > 0` 且实际 `start_time`/`end_time` 区间与同一员工任一未删除的 `UNROSTERABLE` 记录重叠，必须禁止保存，并返回“该班次与员工不可排时间段冲突，不能排入。”实际时刻比较支持跨午夜，采用半开区间，首尾相接不算重叠；`duration_minutes=0` 的休息占位不触发该校验。
+
 Demo 班次清单为前端固定选项，选择后通过现有接口创建 `dta_mock_shift`；清单代码仅用于查找和展示，不写入本表，也不新增班次主数据表。正式产品改为对接标准班次主数据。
 
 ## 14. dta_audit_log 审计日志

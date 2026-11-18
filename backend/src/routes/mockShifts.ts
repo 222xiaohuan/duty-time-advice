@@ -1,10 +1,11 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma";
-import { AppError, ok } from "../lib/response";
+import { AppError, ErrorCode, ok } from "../lib/response";
 import { requireRole } from "../middleware/mockIdentity";
 import { assertEmployeeAccess, assertOrgAccess } from "../lib/access";
 import { bad, parseDate, parseId, parseTime, TENANT_ID } from "../lib/validation";
 import { hkDateOf, hkDateTime } from "../lib/time";
+import { DtaRosterabilityStatus } from "../types/enums";
 
 export const mockShiftsRouter = Router();
 
@@ -36,6 +37,22 @@ function shiftValues(input: Record<string, unknown>, current?: { businessDate: s
   return { businessDate, shiftName, startTime: start, endTime: end, durationMinutes };
 }
 
+async function assertRosterabilityAvailable(empId: number, values: { startTime: Date; endTime: Date; durationMinutes: number }): Promise<void> {
+  // Zero-length placeholders do not occupy a scheduling interval.
+  if (values.durationMinutes <= 0) return;
+  const conflict = await prisma.dtaRosterabilityRecord.findFirst({ where: {
+    tenantId: TENANT_ID,
+    empId,
+    statusCode: DtaRosterabilityStatus.UNROSTERABLE,
+    isDeleted: 0,
+    startTime: { lt: values.endTime },
+    endTime: { gt: values.startTime },
+  }, select: { businessDate: true, startTime: true, endTime: true } });
+  if (conflict) {
+    throw new AppError(ErrorCode.CONFLICT, "该班次与员工不可排时间段冲突，不能排入。", 409);
+  }
+}
+
 mockShiftsRouter.get("/", async (req, res, next) => {
   try {
     const identity = req.identity!;
@@ -65,6 +82,7 @@ mockShiftsRouter.post("/", requireRole("admin", "manager"), async (req, res, nex
     const employee = await employeeOf(empId);
     assertOrgAccess(req, employee.orgId);
     const values = shiftValues(req.body as Record<string, unknown>);
+    await assertRosterabilityAvailable(empId, values);
     const created = await prisma.dtaMockShift.create({ data: { tenantId: TENANT_ID, orgId: employee.orgId, empId, ...values, createdBy: req.identity!.userId, updatedBy: req.identity!.userId } });
     ok(res, created, "模拟班次已创建");
   } catch (error) { next(error); }
@@ -80,6 +98,7 @@ mockShiftsRouter.patch("/:id", requireRole("admin", "manager"), async (req, res,
     const employee = await employeeOf(empId);
     assertOrgAccess(req, employee.orgId);
     const values = shiftValues(req.body as Record<string, unknown>, current);
+    await assertRosterabilityAvailable(empId, values);
     const updated = await prisma.dtaMockShift.update({ where: { id }, data: { orgId: employee.orgId, empId, ...values, updatedBy: req.identity!.userId } });
     ok(res, updated, "模拟班次已更新");
   } catch (error) { next(error); }
