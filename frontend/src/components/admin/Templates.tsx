@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ChevronRight, Link2, Pencil, Plus, Save, Search, Sparkles, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
-import { employeeTypes, errorText, labelOf, orgs, posts, weekdays } from "@/lib/admin";
-import { RosterabilityStatus } from "@/lib/enums";
+import { apiDelete, apiGet, apiPatch, apiPost, type StatusDictionaryItem } from "@/lib/api";
+import { employeeTypes, errorText, labelOf, orgs, posts } from "@/lib/admin";
 import type { MockProfile } from "@/lib/identity";
+import { TemplateWeekTimeline } from "@/components/admin/TemplateWeekTimeline";
 
 type Template = { id: number; templateName: string; description: string | null; startDate: string; endDate: string | null; enabled: number };
 type Item = { id: number; weekday: number; statusCode: string; startTime: string; endTime: string; endDayOffset: number; remark: string | null };
@@ -12,7 +12,6 @@ type Condition = { id: number; orgId: number | null; empTypeCode: string | null;
 type Detail = Template & { items: Item[]; conditions: Condition[] };
 type Employee = { id: number; empName: string; empTypeCode: string; postCode: string };
 type Directory = { orgId: number; orgName: string; employees: Employee[] };
-type ItemForm = Omit<Item, "id">;
 type ConditionForm = Omit<Condition, "id">;
 type TemplateForm = { templateName: string; description: string; startDate: string; endDate: string; enabled: number };
 type DialogMode = "create" | "edit" | "associate" | "generate" | null;
@@ -20,22 +19,18 @@ type GenerationResult = { summary: Record<string, number>; skipped: Array<{ empI
 
 const today = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Hong_Kong" });
 const blankTemplate = (): TemplateForm => ({ templateName: "", description: "", startDate: today(), endDate: "", enabled: 1 });
-const blankItem: ItemForm = { weekday: 1, statusCode: RosterabilityStatus.ROSTERABLE, startTime: "09:00", endTime: "17:00", endDayOffset: 0, remark: "" };
 const blankCondition = (orgId: number | null): ConditionForm => ({ orgId, empTypeCode: null, postCode: null, priority: 0 });
-const statusLabel = (code: string) => code === RosterabilityStatus.ROSTERABLE ? "可排" : code === RosterabilityStatus.PRIORITY_ROSTERABLE ? "优先排" : "不可排";
 const orgLabel = (id: number | null) => id === null ? "不限组织" : orgs.find((org) => org.id === id)?.name ?? String(id);
 const skipLabels: Record<string, string> = { EXISTS: "已存在", LOCKED: "已锁定", SHIFT_CONFLICT: "班次冲突", NO_PARAM: "无参数", NO_TEMPLATE: "无模板", STATUS_DISABLED: "状态未启用" };
 const summaryLabels: Record<string, string> = { shiftConflict: "班次冲突", noParam: "无参数", noTemplate: "无模板", statusDisabled: "状态未启用", exists: "已存在", locked: "已锁定" };
 
-export function Templates({ profile }: { profile: MockProfile }) {
+export function Templates({ profile, statuses }: { profile: MockProfile; statuses: StatusDictionaryItem[] }) {
   const [templates, setTemplates] = useState<Template[]>([]);
   const [page, setPage] = useState<"list" | "detail">("list");
   const [selected, setSelected] = useState<number | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [main, setMain] = useState<TemplateForm>(blankTemplate);
-  const [item, setItem] = useState<ItemForm>(blankItem);
   const [condition, setCondition] = useState<ConditionForm>(blankCondition(profile.orgId ?? null));
-  const [editingItem, setEditingItem] = useState<number | null>(null);
   const [editingCondition, setEditingCondition] = useState<number | null>(null);
   const [dialogMode, setDialogMode] = useState<DialogMode>(null);
   const [dialogTemplate, setDialogTemplate] = useState<Template | null>(null);
@@ -82,14 +77,14 @@ export function Templates({ profile }: { profile: MockProfile }) {
   async function refreshList() { setTemplates(await apiGet<Template[]>("/templates", profile)); }
 
   async function openDetail(id: number) {
-    setError(""); setMessage(""); setSelected(id); setPage("detail"); setEditingItem(null); setEditingCondition(null);
+    setError(""); setMessage(""); setSelected(id); setPage("detail"); setEditingCondition(null);
     try {
       const next = await apiGet<Detail>(`/templates/${id}`, profile); setDetail(next);
       setMain({ templateName: next.templateName, description: next.description ?? "", startDate: next.startDate, endDate: next.endDate ?? "", enabled: next.enabled });
     } catch (cause) { setError(errorText(cause)); }
   }
 
-  function backToList() { setPage("list"); setSelected(null); setDetail(null); setEditingItem(null); setEditingCondition(null); setError(""); }
+  function backToList() { setPage("list"); setSelected(null); setDetail(null); setEditingCondition(null); setError(""); }
   function openCreate() { setMain(blankTemplate()); setDialogTemplate(null); setError(""); setMessage(""); setDialogMode("create"); }
   function openEdit(template: Template) { setMain({ templateName: template.templateName, description: template.description ?? "", startDate: template.startDate, endDate: template.endDate ?? "", enabled: template.enabled }); setDialogTemplate(template); setError(""); setMessage(""); setDialogMode("edit"); }
 
@@ -125,16 +120,6 @@ export function Templates({ profile }: { profile: MockProfile }) {
     } catch (cause) { setError(errorText(cause)); } finally { setBusy(false); }
   }
 
-  async function saveItem(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault(); if (selected === null) return;
-    setBusy(true); setError("");
-    try {
-      const payload = { ...item, remark: item.remark || null }; const path = `/templates/${selected}/items`;
-      if (editingItem === null) await apiPost(path, profile, payload); else await apiPatch(`${path}/${editingItem}`, profile, payload);
-      setDetail(await apiGet<Detail>(`/templates/${selected}`, profile)); setItem(blankItem); setEditingItem(null); setMessage(editingItem === null ? "可排性时段已添加" : "可排性时段已保存");
-    } catch (cause) { setError(errorText(cause)); } finally { setBusy(false); }
-  }
-
   async function saveCondition(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault(); if (!dialogTemplate && selected === null) return;
     if (condition.orgId === null && condition.empTypeCode === null && condition.postCode === null) { setError("至少选择一个匹配条件"); return; }
@@ -154,12 +139,6 @@ export function Templates({ profile }: { profile: MockProfile }) {
     try { await apiDelete(`/templates/${templateId}/conditions/${id}`, profile); const next = await apiGet<Detail>(`/templates/${templateId}`, profile); setAssociationDetail(next); if (selected === templateId) setDetail(next); setMessage("关联条件已删除"); } catch (cause) { setError(errorText(cause)); } finally { setBusy(false); }
   }
 
-  async function deleteItem(id: number) {
-    if (!selected) return;
-    setBusy(true); setError("");
-    try { await apiDelete(`/templates/${selected}/items/${id}`, profile); setDetail(await apiGet<Detail>(`/templates/${selected}`, profile)); setMessage("可排性时段已删除"); } catch (cause) { setError(errorText(cause)); } finally { setBusy(false); }
-  }
-
   async function generate() {
     if (!dialogTemplate) return;
     setBusy(true); setError("");
@@ -177,9 +156,7 @@ export function Templates({ profile }: { profile: MockProfile }) {
     </> : detail && <>
       <div className="template-detail-head"><Button type="button" variant="ghost" onClick={backToList}><ArrowLeft size={16} />返回模板列表</Button><div className="template-detail-actions"><Button type="button" variant="outline" onClick={() => openEdit(detail)}><Pencil size={15} />编辑基本信息</Button><Button type="button" variant="outline" onClick={() => void openAssociation(detail)}><Link2 size={15} />关联人员</Button><Button type="button" onClick={() => openGenerate(detail)}><Sparkles size={15} />生成未来可排性</Button></div></div>
       <div className="template-detail-title"><div><h2>{detail.templateName}</h2><p>{detail.description || "暂无模板描述"} · {detail.startDate} 至 {detail.endDate || "长期有效"}</p></div><span className={`template-status ${detail.enabled ? "enabled" : "disabled"}`}>{detail.enabled ? "启用" : "停用"}</span></div>
-      <section className="admin-section"><div className="admin-intro"><h3>每天可排性</h3><span>周一至周日可配置多个时段，跨午夜时归属开始日</span></div><div className="week-grid">{weekdays.map((day, index) => <div className="week-day" key={day}><strong>{day}</strong>{detail.items.filter((row) => row.weekday === index + 1).map((row) => <div className="time-row" key={row.id}><span className={row.statusCode === RosterabilityStatus.ROSTERABLE ? "rosterable" : row.statusCode === RosterabilityStatus.PRIORITY_ROSTERABLE ? "priority" : "unrosterable"}>{statusLabel(row.statusCode)}</span><span>{row.startTime}–{row.endDayOffset ? "次日 " : ""}{row.endTime}{row.remark && <small>{row.remark}</small>}</span><button type="button" onClick={() => { setEditingItem(row.id); setItem({ weekday: row.weekday, statusCode: row.statusCode, startTime: row.startTime, endTime: row.endTime, endDayOffset: row.endDayOffset, remark: row.remark }); }}>编辑</button><button type="button" aria-label={`删除${day}时段`} onClick={() => void deleteItem(row.id)}>×</button></div>)}{detail.items.every((row) => row.weekday !== index + 1) && <span className="muted-text">无时段</span>}</div>)}</div>
-        <form className="admin-inline-form" onSubmit={saveItem}><h4>{editingItem ? "编辑时段" : "添加时段"}</h4><div className="admin-form-grid"><label>星期<select value={item.weekday} onChange={(event) => setItem({ ...item, weekday: Number(event.target.value) })}>{weekdays.map((day, index) => <option value={index + 1} key={day}>{day}</option>)}</select></label><label>状态<select value={item.statusCode} onChange={(event) => setItem({ ...item, statusCode: event.target.value })}><option value={RosterabilityStatus.ROSTERABLE}>可排</option><option value={RosterabilityStatus.UNROSTERABLE}>不可排</option><option value={RosterabilityStatus.PRIORITY_ROSTERABLE}>优先排</option></select></label><label>开始<input type="time" required value={item.startTime} onChange={(event) => setItem({ ...item, startTime: event.target.value })} /></label><label>结束<input type="time" required value={item.endTime} onChange={(event) => setItem({ ...item, endTime: event.target.value })} /></label><label>结束日期<select value={item.endDayOffset} onChange={(event) => setItem({ ...item, endDayOffset: Number(event.target.value) })}><option value={0}>当天</option><option value={1}>次日（跨午夜）</option></select></label><label>备注<input maxLength={500} value={item.remark ?? ""} onChange={(event) => setItem({ ...item, remark: event.target.value })} /></label></div><div className="admin-actions"><Button type="submit" disabled={busy}><Save size={15} />{editingItem ? "保存时段" : "添加时段"}</Button>{editingItem && <Button type="button" variant="outline" onClick={() => { setEditingItem(null); setItem(blankItem); }}>取消</Button>}</div></form>
-      </section>
+      <section className="admin-section"><div className="admin-intro"><h3>每天可排性</h3><span>按单人周视图方式编辑，拖拽时间轴或点击“+”新增时段，跨午夜时归属开始日</span></div><TemplateWeekTimeline templateId={detail.id} items={detail.items} statuses={statuses} profile={profile} onChanged={(next) => { setMessage(next); void apiGet<Detail>(`/templates/${detail.id}`, profile).then(setDetail).catch((cause) => setError(errorText(cause))); }} /></section>
       <section className="admin-section"><div className="admin-intro"><h3>关联条件</h3><span>当前模板已配置 {detail.conditions.length} 条条件，按优先级匹配员工</span></div><div className="condition-list">{detail.conditions.map((row) => <div className="condition-row" key={row.id}><strong>优先级 {row.priority}</strong><span>{orgLabel(row.orgId)} · {labelOf(employeeTypes, row.empTypeCode)} · {labelOf(posts, row.postCode)}</span><button type="button" onClick={() => void openAssociation(detail, row)}>编辑</button><button type="button" aria-label="删除条件" onClick={() => void deleteCondition(row.id)}>×</button></div>)}</div></section>
     </>}
 
