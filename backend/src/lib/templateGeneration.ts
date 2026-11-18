@@ -7,13 +7,20 @@ import { DtaRosterabilityStatus, DtaSourceCode } from "../types/enums";
 type Employee = { id: number; orgId: number; empTypeCode: string; postCode: string };
 type Template = Awaited<ReturnType<typeof prisma.dtaTemplate.findMany>>[number];
 type Condition = Awaited<ReturnType<typeof prisma.dtaTemplateCondition.findMany>>[number];
+type EmployeeAssociation = Awaited<ReturnType<typeof prisma.dtaTemplateEmployee.findMany>>[number];
 type Item = Awaited<ReturnType<typeof prisma.dtaTemplateItem.findMany>>[number];
 
 type SkipReason = "NO_PARAM" | "NO_TEMPLATE" | "EXISTS" | "LOCKED" | "SHIFT_CONFLICT" | "STATUS_DISABLED";
 type Skipped = { empId: number; businessDate: string | null; templateItemId: number | null; reason: SkipReason; message: string };
 type Summary = { created: number; exists: number; locked: number; shiftConflict: number; noParam: number; noTemplate: number; statusDisabled: number };
 
-function selectTemplate(templates: Template[], conditions: Condition[], employee: Employee, businessDate: string): Template | null {
+function selectTemplate(templates: Template[], conditions: Condition[], employeeAssociations: EmployeeAssociation[], employee: Employee, businessDate: string): Template | null {
+  const directCandidates = employeeAssociations.flatMap((association) => {
+    if (association.empId !== employee.id) return [];
+    const template = templates.find((row) => row.id === association.templateId);
+    if (!template || template.startDate > businessDate || (template.endDate !== null && template.endDate < businessDate)) return [];
+    return [{ template, priority: association.priority }];
+  });
   const candidates = conditions.flatMap((condition) => {
     const template = templates.find((row) => row.id === condition.templateId);
     if (!template || template.startDate > businessDate || (template.endDate !== null && template.endDate < businessDate)) return [];
@@ -22,6 +29,8 @@ function selectTemplate(templates: Template[], conditions: Condition[], employee
     if (condition.postCode !== null && condition.postCode !== employee.postCode) return [];
     return [{ template, priority: condition.priority }];
   });
+  directCandidates.sort((a, b) => a.priority - b.priority || b.template.updatedAt.getTime() - a.template.updatedAt.getTime() || b.template.id - a.template.id);
+  if (directCandidates.length > 0) return directCandidates[0].template;
   candidates.sort((a, b) => a.priority - b.priority || b.template.updatedAt.getTime() - a.template.updatedAt.getTime() || b.template.id - a.template.id);
   return candidates[0]?.template ?? null;
 }
@@ -30,11 +39,12 @@ export async function generateForManager(orgId: number, managerId: number, now: 
   const org = await prisma.dtaOrg.findFirst({ where: { id: orgId, tenantId: TENANT_ID, isDeleted: 0 } });
   if (!org) bad("管辖组织不存在");
   const startMonday = hkNow(now).startOf("week").plus({ weeks: 1 }).toISODate()!;
-  const [employees, params, templates, conditions, items, statuses] = await Promise.all([
+  const [employees, params, templates, conditions, employeeAssociations, items, statuses] = await Promise.all([
     prisma.dtaEmployee.findMany({ where: { tenantId: TENANT_ID, orgId, isDeleted: 0 }, orderBy: { id: "asc" } }),
     prisma.dtaParamGroup.findMany({ where: { tenantId: TENANT_ID, orgId, isDeleted: 0 } }),
     prisma.dtaTemplate.findMany({ where: { tenantId: TENANT_ID, enabled: 1, isDeleted: 0, ...(templateId === undefined ? {} : { id: templateId }) } }),
     prisma.dtaTemplateCondition.findMany({ where: { tenantId: TENANT_ID, isDeleted: 0 } }),
+    prisma.dtaTemplateEmployee.findMany({ where: { tenantId: TENANT_ID, isDeleted: 0 } }),
     prisma.dtaTemplateItem.findMany({ where: { tenantId: TENANT_ID, isDeleted: 0 } }),
     prisma.dtaRosterabilityStatusDict.findMany({ where: { tenantId: TENANT_ID, enabled: 1, isDeleted: 0 } }),
   ]);
@@ -59,7 +69,7 @@ export async function generateForManager(orgId: number, managerId: number, now: 
     }
     for (let dayIndex = 0; dayIndex < param.autoGenRangeWeek * 7; dayIndex++) {
       const businessDate = addDays(startMonday, dayIndex);
-      const template = selectTemplate(templates, conditions, employee, businessDate);
+      const template = selectTemplate(templates, conditions, employeeAssociations, employee, businessDate);
       if (!template) {
         skip(employee.id, businessDate, null, "NO_TEMPLATE", "该业务日没有匹配的有效模板");
         continue;

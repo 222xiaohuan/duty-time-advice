@@ -246,7 +246,22 @@ Demo 不增加班组、职级或自定义字段。
 
 单条条件至少一个匹配字段非空。非空字段之间使用 AND 关系。
 
-## 12. dta_rosterability_record 可排性记录
+## 12. dta_template_employee 模板员工直绑
+
+| 字段 | 类型 | 约束与说明 |
+| --- | --- | --- |
+| id | int | 主键自增 |
+| tenant_id | int | 租户 ID |
+| template_id | int | 模板 ID |
+| emp_id | int | 员工 ID |
+| priority | int | 数字越小优先级越高；同一员工存在多个直绑模板时使用 |
+| is_deleted | int | 默认 0，支持删除后重新关联 |
+| created_at / updated_at | datetime | 创建与更新时间 |
+| created_by / updated_by | int | 创建与更新人 |
+
+唯一约束：`tenant_id + template_id + emp_id + is_deleted`。员工直绑是模板条件匹配的特殊覆盖；生成时同一员工优先选择直绑模板，再按优先级、模板更新时间和模板 ID 决定。Demo 仅允许管理员或主管关联员工，主管只能关联所辖组织员工。
+
+## 13. dta_rosterability_record 可排性记录
 
 | 字段 | 类型 | 约束与说明 |
 | --- | --- | --- |

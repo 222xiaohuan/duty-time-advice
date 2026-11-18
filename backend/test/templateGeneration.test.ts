@@ -97,6 +97,28 @@ describe("T003 模板维护与经理生成", () => {
     expect(await prisma.dtaRosterabilityRecord.count({ where: { templateItemId: itemId } })).toBe(1);
   });
 
+  it("支持单个或多个员工直绑，并让直绑优先覆盖条件匹配", async () => {
+    const by = { createdBy: 9001, updatedBy: 9001 };
+    await prisma.dtaEmployee.create({ data: { id: 501, tenantId: 1, orgId: 1, empName: "Direct employee", empTypeCode: "FULL_TIME", postCode: "BETTING_SERVICE", ...by } });
+    const fallback = await request(app).post("/api/templates").set(admin).send({ templateName: "条件后备模板", startDate: "2026-01-01" });
+    await request(app).post(`/api/templates/${fallback.body.data.id}/items`).set(admin).send({ weekday: 1, statusCode: "ROSTERABLE", startTime: "08:00", endTime: "09:00" });
+    await request(app).post(`/api/templates/${fallback.body.data.id}/conditions`).set(admin).send({ priority: 0, orgId: 1, empTypeCode: "FULL_TIME", postCode: "BETTING_SERVICE" });
+
+    const direct = await request(app).post(`/api/templates/${templateId}/employees`).set(admin).send({ empIds: [1, 501], priority: 5 });
+    expect(direct.status).toBe(200);
+    expect(direct.body.data.associations).toHaveLength(2);
+    expect((await request(app).post(`/api/templates/${templateId}/employees`).set(manager1).send({ empIds: [2], priority: 0 })).status).toBe(403);
+    const details = await request(app).get(`/api/templates/${templateId}`).set(manager1);
+    expect(details.body.data.employeeAssociations.map((row: { empId: number }) => row.empId)).toEqual(expect.arrayContaining([1]));
+
+    await prisma.dtaParamGroup.update({ where: { tenantId_orgId_empTypeCode: { tenantId: 1, orgId: 1, empTypeCode: "FULL_TIME" } }, data: { cutoffDays: 0, autoGenRangeWeek: 1 } });
+    await generateForManager(1, 9101, now);
+    expect(await prisma.dtaRosterabilityRecord.findFirst({ where: { empId: 501, businessDate: "2026-11-16" } })).toMatchObject({ templateId, templateItemId: itemId });
+    const associationId = direct.body.data.associations[1].id;
+    expect((await request(app).delete(`/api/templates/${templateId}/employees/${associationId}`).set(admin)).status).toBe(200);
+    expect((await request(app).post(`/api/templates/${templateId}/employees`).set(admin).send({ empIds: [501], priority: 1 })).status).toBe(200);
+  });
+
   it("目标日到达截止时间时跳过，且条件优先级选择实际模板", async () => {
     const second = await request(app).post("/api/templates").set(admin).send({ templateName: "低优先级模板", startDate: "2026-01-01" });
     const secondId = second.body.data.id;

@@ -27,12 +27,14 @@ meRouter.get("/rosterability-config", requireRole("employee"), async (req, res, 
       where: { tenantId: TENANT_ID, isDeleted: 0, enabled: 1, empSelfEdit: 1 },
       orderBy: { id: "asc" },
     });
+    const statusRank: Record<string, number> = { ROSTERABLE: 0, UNROSTERABLE: 1, PRIORITY_ROSTERABLE: 2 };
+    const allowedStatusRows = statuses.filter((status) => allowed.has(status.statusCode as DtaRosterabilityStatus)).sort((a, b) => (statusRank[a.statusCode] ?? 99) - (statusRank[b.statusCode] ?? 99));
     ok(res, {
       empId: employee.id, empName: employee.empName, orgId: employee.orgId, empTypeCode: employee.empTypeCode,
       cutoffDays: param.cutoffDays, baselineRule: param.baselineRule, submitMode: param.submitMode,
       empEditEnable: param.empEditEnable,
       priorityRosterEnable: param.priorityRosterEnable,
-      allowedStatuses: statuses.filter((status) => allowed.has(status.statusCode as DtaRosterabilityStatus)).map((status) => ({
+      allowedStatuses: allowedStatusRows.map((status) => ({
         statusCode: status.statusCode, statusName: status.statusName, colorHex: status.colorHex,
       })),
     });

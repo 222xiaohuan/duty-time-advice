@@ -207,6 +207,13 @@ button { cursor: pointer; }
 .association-people { max-height: 185px; overflow-y: auto; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 .association-people > div { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
 .association-people span { color: #788590; font-size: 11px; }
+.association-person-choice { display: flex; align-items: center; gap: 9px; padding: 9px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+.association-person-choice input { flex: 0 0 auto; width: 15px; height: 15px; accent-color: var(--primary); }
+.association-person-choice span { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.association-person-choice small { color: #788590; font-size: 11px; font-weight: 400; }
+.direct-association-editor { display: flex; align-items: end; gap: 12px; padding: 10px; border: 1px solid #d8e2e9; background: #f6f9fb; }
+.direct-association-editor label { display: flex; flex-direction: column; gap: 5px; color: #526171; font-size: 12px; font-weight: 600; }
+.direct-association-editor input { width: 100px; height: 36px; padding: 7px 9px; border: 1px solid #ccd7df; border-radius: 4px; font: inherit; }
 .template-association-existing { display: flex; flex-direction: column; gap: 7px; }
 .template-association-existing > strong { font-size: 13px; }
 .template-association-existing .condition-row { margin: 0; }
@@ -581,6 +588,8 @@ button { cursor: pointer; }
   .template-dialog { padding: 16px; }
   .association-filter-grid { grid-template-columns: minmax(0, 1fr); }
   .association-people > div { align-items: flex-start; flex-direction: column; gap: 3px; }
+  .direct-association-editor { align-items: stretch; flex-direction: column; }
+  .direct-association-editor input { width: 100%; }
   .employee-week { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .employee-day { min-height: 120px; }
   .employee-day-entries { min-height: 65px; }

@@ -272,6 +272,23 @@ model DtaTemplateCondition {
   @@map("dta_template_condition")
 }
 
+model DtaTemplateEmployee {
+  id         Int      @id @default(autoincrement())
+  tenantId   Int      @map("tenant_id")
+  templateId Int      @map("template_id")
+  empId      Int      @map("emp_id")
+  priority   Int      @default(0) // 数字越小优先级越高；员工直绑优先于条件匹配
+  isDeleted  Int      @default(0) @map("is_deleted")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  createdBy  Int      @map("created_by")
+  updatedBy  Int      @map("updated_by")
+
+  @@unique([tenantId, templateId, empId, isDeleted])
+  @@index([tenantId, empId, isDeleted])
+  @@map("dta_template_employee")
+}
+
 // ===================== 可排性记录 =====================
 
 model DtaRosterabilityRecord {
