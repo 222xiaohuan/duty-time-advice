@@ -129,6 +129,7 @@ export function TemplateWeekTimeline({ templateId, items, statuses, profile, onC
   function pointerDown(event: PointerEvent<HTMLDivElement>, weekday: number) {
     if (event.button !== 0 || busy || !chosenStatus) return;
     const start = Math.min(1425, atPointer(event));
+    if (segmentsFor(items, weekday).some((segment) => start >= segment.start && start < segment.end)) return;
     const next = { pointerId: event.pointerId, weekday, start, end: start + 15 };
     dragRef.current = next; setDrag(next); event.currentTarget.setPointerCapture(event.pointerId); event.preventDefault();
   }
@@ -148,7 +149,9 @@ export function TemplateWeekTimeline({ templateId, items, statuses, profile, onC
     let end = Math.max(current.start, last);
     if (start === end) end = Math.min(1440, start + 15);
     if (start === 1440) { start = 1425; end = 1440; }
-    dragRef.current = null; setDrag(null); openNew(weekday, start, end);
+    dragRef.current = null; setDrag(null);
+    if (overlaps(items, { weekday, startTime: timeOf(start), endTime: timeOf(end), endDayOffset: 0 })) { setError("该时间范围已有可排性时段，请调整时间或先编辑已有时段。"); return; }
+    openNew(weekday, start, end);
   }
 
   function resizeStart(event: PointerEvent<HTMLSpanElement>, item: TemplateTimelineItem, edge: "start" | "end", continued: boolean) {
@@ -242,7 +245,7 @@ export function TemplateWeekTimeline({ templateId, items, statuses, profile, onC
         const lanes = Math.max(1, ...daySegments.map((segment) => segment.lane + 1));
         return <div className="manager-day-grid-row" key={day}>
           <div className="manager-day-person week-date"><strong>{day}</strong><Button type="button" variant="ghost" size="icon" title={`为${day}新增时段`} aria-label={`为${day}新增时段`} disabled={!chosenStatus} onClick={() => openNew(weekday)}><Plus size={16} /></Button></div>
-          <div className="manager-day-row-body"><div className="manager-day-track" style={{ height: `${Math.max(56, lanes * 24 + 16)}px` }} onPointerDown={(event) => pointerDown(event, weekday)} onPointerMove={pointerMove} onPointerUp={(event) => pointerUp(event, weekday)} onPointerCancel={() => { dragRef.current = null; setDrag(null); }} aria-label={`${day} 模板可排性时间轴`}>
+          <div className="manager-day-row-body"><div className="manager-day-track" style={{ height: `${Math.max(32, lanes * 24 + 8)}px` }} onPointerDown={(event) => pointerDown(event, weekday)} onPointerMove={pointerMove} onPointerUp={(event) => pointerUp(event, weekday)} onPointerCancel={() => { dragRef.current = null; setDrag(null); }} aria-label={`${day} 模板可排性时间轴`}>
             {daySegments.map(({ item, start, end, lane, continued }) => {
               const status = statuses.find((value) => value.statusCode === item.statusCode);
               const color = status?.colorHex ?? fallbackColor(item.statusCode);
