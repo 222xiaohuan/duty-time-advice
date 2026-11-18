@@ -1,19 +1,20 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent, type PointerEvent } from "react";
 import { ChevronLeft, ChevronRight, Plus, RefreshCw, Save, Search, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiDelete, apiGet, apiPatch, apiPost, type StatusDictionaryItem } from "@/lib/api";
 import { employeeTypes, errorText, labelOf, posts, weekdays } from "@/lib/admin";
-import { RosterabilityStatus } from "@/lib/enums";
+import { BaselineRule, RosterabilityStatus } from "@/lib/enums";
 import type { MockProfile } from "@/lib/identity";
 import { shiftPresets, type ShiftPreset } from "@/lib/shiftPresets";
 import { addDays, hkDate, hkTime, hkToday, mondayOf, shortDay } from "@/lib/week";
 
-type Employee = { id: number; empName: string; empTypeCode: string; postCode: string; priorityRosterEnable: number };
+type Employee = { id: number; empName: string; empTypeCode: string; postCode: string; baselineRule: string | null; priorityRosterEnable: number };
 type Directory = { orgId: number; orgName: string; employees: Employee[] };
 type RecordRow = { id: number; empId: number; businessDate: string; statusCode: string; startTime: string; endTime: string };
 type ShiftRow = { id: number; empId: number; businessDate: string; shiftName: string; startTime: string; endTime: string; durationMinutes: number };
 type Selection = { empId: number; day: string };
 type MarkerSelection = { id: number; day: string };
+type DragRange = { start: number; end: number };
 type ShiftForm = { shiftName: string; startTime: string; endTime: string; endDayOffset: number };
 const blankShift = (): ShiftForm => ({ shiftName: "工作班", startTime: "09:00", endTime: "17:00", endDayOffset: 0 });
 
@@ -27,6 +28,11 @@ function minuteOf(iso: string): number {
   return hour * 60 + minute;
 }
 
+function timeOfMinute(minute: number): string {
+  const normalized = minute === 1440 ? 0 : Math.max(0, Math.min(1439, minute));
+  return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${String(normalized % 60).padStart(2, "0")}`;
+}
+
 function durationLabel(minutes: number): string {
   return `${Number((minutes / 60).toFixed(1))}h`;
 }
@@ -36,13 +42,50 @@ function durationLabelFromTimes(startTime: string, endTime: string): string {
   return durationLabel(minutes);
 }
 
+type AvailabilitySegment = { start: number; end: number; statusCode: string };
+
+function recordCovers(row: RecordRow, day: string, minute: number): boolean {
+  const startDay = row.businessDate;
+  const endDay = hkDate(row.endTime);
+  if (startDay === day) {
+    const start = minuteOf(row.startTime);
+    const end = endDay !== startDay ? (minuteOf(row.endTime) || 1440) : minuteOf(row.endTime);
+    return minute >= start && minute < end;
+  }
+  if (endDay === day && startDay < day) return minute < (minuteOf(row.endTime) || 1440);
+  return false;
+}
+
+function availabilityState(employee: Employee, rows: RecordRow[], day: string, minute: number): string {
+  let state: string = employee.baselineRule === BaselineRule.BASE_UNROSTERABLE ? RosterabilityStatus.UNROSTERABLE : RosterabilityStatus.ROSTERABLE;
+  rows.filter((row) => row.empId === employee.id).sort((a, b) => a.id - b.id).forEach((row) => {
+    if (recordCovers(row, day, minute)) state = row.statusCode;
+  });
+  return state;
+}
+
+function availabilitySegments(employee: Employee, rows: RecordRow[], day: string): AvailabilitySegment[] {
+  const segments: AvailabilitySegment[] = [];
+  for (let minute = 0; minute < 1440; minute += 15) {
+    const statusCode = availabilityState(employee, rows, day, minute);
+    const previous = segments[segments.length - 1];
+    if (previous?.statusCode === statusCode) previous.end += 15;
+    else segments.push({ start: minute, end: minute + 15, statusCode });
+  }
+  return segments;
+}
+
 export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; statuses: StatusDictionaryItem[] }) {
   const [directory, setDirectory] = useState<Directory | null>(null);
   const [monday, setMonday] = useState(() => mondayOf(hkToday()));
+  const [day, setDay] = useState(() => hkToday());
+  const [mode, setMode] = useState<"week" | "day">("week");
   const [employeeFilter, setEmployeeFilter] = useState("");
   const [typeFilter, setTypeFilter] = useState("");
   const [postFilter, setPostFilter] = useState("");
   const [selection, setSelection] = useState<Selection | null>(null);
+  const [dragRange, setDragRange] = useState<DragRange | null>(null);
+  const dragRef = useRef<{ pointerId: number; empId: number; start: number; end: number } | null>(null);
   const [selectedMarker, setSelectedMarker] = useState<MarkerSelection | null>(null);
   const [records, setRecords] = useState<RecordRow[]>([]);
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
@@ -88,13 +131,13 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
     let active = true;
     setLoading(true);
     Promise.all([
-      apiGet<RecordRow[]>(`/rosterability-records?orgId=${directory.orgId}&from=${addDays(monday, -1)}&to=${weekDays[6]}`, profile),
+      apiGet<RecordRow[]>(`/rosterability-records?orgId=${directory.orgId}&from=${addDays(mode === "day" ? day : monday, -1)}&to=${mode === "day" ? day : weekDays[6]}`, profile),
       apiGet<ShiftRow[]>(`/mock-shifts?orgId=${directory.orgId}`, profile),
     ]).then(([nextRecords, nextShifts]) => {
       if (active) { setRecords(nextRecords); setShifts(nextShifts); setLoading(false); }
     }).catch((cause: unknown) => { if (active) { setError(errorText(cause)); setLoading(false); } });
     return () => { active = false; };
-  }, [directory, monday, profile, refresh]);
+  }, [directory, monday, day, mode, profile, refresh]);
 
   useEffect(() => {
     if (!directory) return;
@@ -104,11 +147,11 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
   }, [directory, employeeFilter, typeFilter, postFilter, selection?.empId]);
 
   function closeDialog() {
-    setDialogMode(null); setSelection(null); setEditingId(null); setForm(blankShift()); setPresetSearch("");
+    setDialogMode(null); setSelection(null); setEditingId(null); setForm(blankShift()); setPresetSearch(""); setDragRange(null); dragRef.current = null;
   }
 
   function select(empId: number, day: string) {
-    setSelection({ empId, day }); setSelectedMarker(null); setEditingId(null); setPresetSearch(""); setError(""); setDialogMode("catalog");
+    setSelection({ empId, day }); setSelectedMarker(null); setEditingId(null); setPresetSearch(""); setError(""); setDragRange(null); setDialogMode("catalog");
   }
 
   function edit(shift: ShiftRow) {
@@ -122,6 +165,11 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
     setMonday(next);
     setSelectedMarker(null);
     closeDialog();
+  }
+
+  function movePeriod(amount: number) {
+    if (mode === "day") { setDay((current) => addDays(current, amount)); closeDialog(); setSelectedMarker(null); return; }
+    move(amount);
   }
 
   async function run(action: () => Promise<unknown>, success: string): Promise<boolean> {
@@ -145,9 +193,53 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
 
   function assignPreset(preset: ShiftPreset) {
     if (!selection || busy) return;
-    const body = { empId: selection.empId, businessDate: selection.day, shiftName: preset.name,
-      startTime: preset.startTime, endTime: preset.endTime, endDayOffset: preset.endDayOffset };
+    const startTime = dragRange ? timeOfMinute(dragRange.start) : preset.startTime;
+    const endTime = dragRange ? timeOfMinute(dragRange.end === 1440 ? 0 : dragRange.end) : preset.endTime;
+    const endDayOffset = dragRange ? (dragRange.end === 1440 ? 1 : 0) : preset.endDayOffset;
+    const body = { empId: selection.empId, businessDate: selection.day, shiftName: preset.name, startTime, endTime, endDayOffset };
     void run(() => apiPost("/mock-shifts", profile, body), "模拟班次已排入").then((saved) => { if (saved) closeDialog(); });
+  }
+
+  function dayPointerMinute(event: PointerEvent<HTMLDivElement>): number {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return Math.max(0, Math.min(1440, Math.round((event.clientX - rect.left) / rect.width * 96) * 15));
+  }
+
+  function dayPointerDown(event: PointerEvent<HTMLDivElement>, employee: Employee) {
+    if (event.button !== 0 || busy || !availabilityState(employee, records, day, Math.min(1425, dayPointerMinute(event))) || availabilityState(employee, records, day, Math.min(1425, dayPointerMinute(event))) === RosterabilityStatus.UNROSTERABLE) {
+      if (event.button === 0 && availabilityState(employee, records, day, Math.min(1425, dayPointerMinute(event))) === RosterabilityStatus.UNROSTERABLE) setError("不可排时间段无法排入模拟班次");
+      return;
+    }
+    const start = Math.min(1425, dayPointerMinute(event));
+    dragRef.current = { pointerId: event.pointerId, empId: employee.id, start, end: start + 15 };
+    setDragRange({ start, end: start + 15 });
+    try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* synthetic pointer events may not have an active capture target */ }
+    event.preventDefault();
+  }
+
+  function dayPointerMove(event: PointerEvent<HTMLDivElement>) {
+    const current = dragRef.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    const end = dayPointerMinute(event);
+    const next = { ...current, end };
+    dragRef.current = next;
+    setDragRange({ start: Math.min(next.start, next.end), end: Math.max(next.start, next.end) });
+  }
+
+  function dayPointerUp(event: PointerEvent<HTMLDivElement>, employee: Employee) {
+    const current = dragRef.current;
+    if (!current || current.pointerId !== event.pointerId || current.empId !== employee.id) return;
+    const end = dayPointerMinute(event);
+    const start = Math.min(current.start, end);
+    const finish = Math.max(current.start, end) === start ? Math.min(1440, start + 15) : Math.max(current.start, end);
+    dragRef.current = null;
+    setDragRange({ start, end: finish });
+    for (let minute = start; minute < finish; minute += 15) {
+      if (availabilityState(employee, records, day, minute) === RosterabilityStatus.UNROSTERABLE) {
+        setDragRange(null); setError("不可排时间段无法排入模拟班次"); return;
+      }
+    }
+    setError(""); setSelection({ empId: employee.id, day }); setPresetSearch(""); setDialogMode("catalog");
   }
 
   function removeShift() {
@@ -176,12 +268,13 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
   return <div className="schedule-page">
     <div className="schedule-controls">
       <div className="schedule-week-nav">
-        <Button type="button" variant="outline" size="icon" aria-label="上一周" title="上一周" onClick={() => move(-1)}><ChevronLeft size={16} /></Button>
-        <strong>{monday} — {weekDays[6]}</strong>
-        <Button type="button" variant="outline" size="icon" aria-label="下一周" title="下一周" onClick={() => move(1)}><ChevronRight size={16} /></Button>
-        <Button type="button" variant="outline" onClick={() => { setMonday(mondayOf(hkToday())); setSelectedMarker(null); closeDialog(); }}>本周</Button>
+        <Button type="button" variant="outline" size="icon" aria-label={mode === "day" ? "前一天" : "上一周"} title={mode === "day" ? "前一天" : "上一周"} onClick={() => movePeriod(-1)}><ChevronLeft size={16} /></Button>
+        <strong>{mode === "day" ? `${day} ${shortDay(day)}` : `${monday} — ${weekDays[6]}`}</strong>
+        <Button type="button" variant="outline" size="icon" aria-label={mode === "day" ? "后一天" : "下一周"} title={mode === "day" ? "后一天" : "下一周"} onClick={() => movePeriod(1)}><ChevronRight size={16} /></Button>
+        <Button type="button" variant="outline" onClick={() => { if (mode === "day") setDay(hkToday()); else setMonday(mondayOf(hkToday())); setSelectedMarker(null); closeDialog(); }}>{mode === "day" ? "今天" : "本周"}</Button>
         <Button type="button" variant="outline" size="icon" aria-label="刷新排班" title="刷新排班" onClick={() => setRefresh((value) => value + 1)}><RefreshCw size={16} /></Button>
       </div>
+      <div className="schedule-view-switch" role="group" aria-label="模拟排班呈现方式"><button type="button" className={mode === "week" ? "selected" : ""} aria-pressed={mode === "week"} onClick={() => { setMode("week"); closeDialog(); }}>周模式</button><button type="button" className={mode === "day" ? "selected" : ""} aria-pressed={mode === "day"} onClick={() => { setMode("day"); closeDialog(); }}>天模式</button></div>
     </div>
     <div className="schedule-filters">
       <label>组织<select disabled value={directory?.orgId ?? ""}><option value={directory?.orgId ?? ""}>{directory?.orgName ?? "加载中"}</option></select></label>
@@ -191,8 +284,20 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
     </div>
     <div className="schedule-legend" aria-label="可排性状态">{activeStatuses.map((status) => <span key={status.statusCode}><i style={{ backgroundColor: status.colorHex ?? (status.statusCode === RosterabilityStatus.ROSTERABLE ? "#4a90e2" : status.statusCode === RosterabilityStatus.PRIORITY_ROSTERABLE ? "#2e8b57" : "#a9a9a9") }} />{status.statusName}</span>)}</div>
     {!dialogMode && error && <p className="form-error" role="alert">{error}</p>}{notice && <p className="form-success" role="status">{notice}</p>}
-    <section className="schedule-board" aria-label="模拟排班周表">
-      {loading ? <div className="employee-loading">正在加载班次和可排性记录</div> : employees.length === 0 ? <div className="manager-no-data">当前筛选下没有员工</div> : <div className="schedule-scroll"><div className="schedule-grid">
+    <section className="schedule-board" aria-label={mode === "day" ? "模拟排班天表" : "模拟排班周表"}>
+      {loading ? <div className="employee-loading">正在加载班次和可排性记录</div> : employees.length === 0 ? <div className="manager-no-data">当前筛选下没有员工</div> : mode === "day" ? <div className="schedule-day-scroll"><div className="schedule-day-grid">
+        <div className="schedule-day-column-head">员工</div><div className="schedule-day-ruler">{Array.from({ length: 13 }, (_, index) => index * 2).map((hour) => <span key={hour} style={{ left: `${hour / 24 * 100}%` }}>{String(hour).padStart(2, "0")}</span>)}</div>
+        {employees.map((employee) => { const availability = availabilitySegments(employee, records, day); const dayShifts = shifts.filter((shift) => shift.empId === employee.id && (shift.businessDate === day || hkDate(shift.endTime) === day)); return <div className="schedule-day-row" key={employee.id}>
+          <div className="schedule-day-person"><strong>{employee.empName}</strong><small>{labelOf(employeeTypes, employee.empTypeCode)} · {labelOf(posts, employee.postCode)}</small></div>
+          <div className="schedule-day-body"><div className="schedule-day-availability" aria-label={`${employee.empName} ${day} 可排性`}>
+            {availability.map((segment) => <span key={`${segment.start}-${segment.end}`} className={`schedule-day-availability-segment ${segment.statusCode === RosterabilityStatus.UNROSTERABLE ? "unrosterable" : segment.statusCode === RosterabilityStatus.PRIORITY_ROSTERABLE ? "priority" : "rosterable"}`} style={{ left: `${segment.start / 1440 * 100}%`, width: `${(segment.end - segment.start) / 1440 * 100}%` }} title={`${segment.statusCode === RosterabilityStatus.UNROSTERABLE ? "不可排" : segment.statusCode === RosterabilityStatus.PRIORITY_ROSTERABLE ? "优先排" : "可排"} ${timeOfMinute(segment.start)}–${timeOfMinute(segment.end === 1440 ? 0 : segment.end)}`}><b>{(segment.end - segment.start) >= 120 ? (segment.statusCode === RosterabilityStatus.UNROSTERABLE ? "不可排" : segment.statusCode === RosterabilityStatus.PRIORITY_ROSTERABLE ? "优先排" : "可排") : ""}</b></span>)}
+          </div><div className="schedule-day-track" onPointerDown={(event) => dayPointerDown(event, employee)} onPointerMove={dayPointerMove} onPointerUp={(event) => dayPointerUp(event, employee)} onPointerCancel={() => { dragRef.current = null; setDragRange(null); }} aria-label={`${employee.empName} ${day} 排班时间轴`}>
+            {availability.filter((segment) => segment.statusCode === RosterabilityStatus.UNROSTERABLE).map((segment) => <span className="schedule-day-unavailable" key={`blocked-${segment.start}`} style={{ left: `${segment.start / 1440 * 100}%`, width: `${(segment.end - segment.start) / 1440 * 100}%` }} aria-hidden="true" />)}
+            {dragRange && (selection?.empId === employee.id || dragRef.current?.empId === employee.id) && <span className="schedule-day-draft" style={{ left: `${dragRange.start / 1440 * 100}%`, width: `${(dragRange.end - dragRange.start) / 1440 * 100}%` }} />}
+            {dayShifts.map((shift) => { const continued = shift.businessDate !== day; const start = continued ? 0 : minuteOf(shift.startTime); const end = hkDate(shift.endTime) !== day ? 1440 : (minuteOf(shift.endTime) || 1440); return <button type="button" className="schedule-day-shift" key={shift.id} style={{ left: `${start / 1440 * 100}%`, width: `${Math.max(0.6, (end - start) / 1440 * 100)}%` }} onPointerDown={(event) => event.stopPropagation()} onClick={() => edit(shift)} title={`${shift.shiftName} · ${hkTime(shift.startTime)}–${hkDate(shift.endTime) !== shift.businessDate ? "次日 " : ""}${hkTime(shift.endTime)} · ${durationLabel(shift.durationMinutes)}`}><span>{hkTime(shift.startTime)}–{hkTime(shift.endTime)} ({durationLabel(shift.durationMinutes)})</span></button>; })}
+          </div></div>
+        </div>; })}
+      </div></div> : <div className="schedule-scroll"><div className="schedule-grid">
         <div className="schedule-column-head">员工</div>{weekDays.map((day, index) => <div className="schedule-column-head" key={day}>{shortDay(day)} {weekdays[index]}</div>)}
         {employees.map((employee) => <div className="schedule-row" key={employee.id}>
           <div className="schedule-person"><strong>{employee.empName}</strong><small>{labelOf(employeeTypes, employee.empTypeCode)} · {labelOf(posts, employee.postCode)}</small></div>
