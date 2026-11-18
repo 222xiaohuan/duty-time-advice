@@ -102,7 +102,7 @@ describe("T003 模板维护与经理生成", () => {
     await prisma.dtaEmployee.create({ data: { id: 501, tenantId: 1, orgId: 1, empName: "Direct employee", empTypeCode: "FULL_TIME", postCode: "BETTING_SERVICE", ...by } });
     const fallback = await request(app).post("/api/templates").set(admin).send({ templateName: "条件后备模板", startDate: "2026-01-01" });
     await request(app).post(`/api/templates/${fallback.body.data.id}/items`).set(admin).send({ weekday: 1, statusCode: "ROSTERABLE", startTime: "08:00", endTime: "09:00" });
-    await request(app).post(`/api/templates/${fallback.body.data.id}/conditions`).set(admin).send({ priority: 0, orgId: 1, empTypeCode: "FULL_TIME", postCode: "BETTING_SERVICE" });
+    await request(app).post(`/api/templates/${fallback.body.data.id}/conditions`).set(admin).send({ priority: 0, orgId: 1, empTypeCode: "FULL_TIME" });
 
     const direct = await request(app).post(`/api/templates/${templateId}/employees`).set(admin).send({ empIds: [1, 501], priority: 5 });
     expect(direct.status).toBe(200);
@@ -146,7 +146,7 @@ describe("T003 模板维护与经理生成", () => {
     const created = await request(app).post("/api/templates").set(admin).send({ templateName: "临时模板", startDate: "2026-01-01" });
     const id = created.body.data.id;
     const item = await request(app).post(`/api/templates/${id}/items`).set(admin).send({ weekday: 7, statusCode: "ROSTERABLE", startTime: "09:00", endTime: "12:00" });
-    const condition = await request(app).post(`/api/templates/${id}/conditions`).set(admin).send({ priority: 3, orgId: 1 });
+    const condition = await request(app).post(`/api/templates/${id}/conditions`).set(admin).send({ priority: 3, orgId: 2 });
     expect((await request(app).patch(`/api/templates/${id}`).set(admin).send({ templateName: "已修改模板" })).body.data.templateName).toBe("已修改模板");
     expect((await request(app).patch(`/api/templates/${id}/items/${item.body.data.id}`).set(admin).send({ endTime: "13:00" })).body.data.endTime).toBe("13:00");
     expect((await request(app).patch(`/api/templates/${id}/conditions/${condition.body.data.id}`).set(admin).send({ priority: 4 })).body.data.priority).toBe(4);
@@ -181,5 +181,48 @@ describe("T003 模板维护与经理生成", () => {
     expect(await prisma.dtaRosterabilityRecord.count({ where })).toBe(12);
     expect(await prisma.dtaRosterabilityRecord.count({ where: { ...where, businessDate: "2027-02-01" } })).toBe(1);
     expect(await prisma.dtaRosterabilityRecord.count({ where: { ...where, businessDate: "2027-02-08" } })).toBe(0);
+  });
+
+  it("阻止重叠生效日期的相同条件，允许日期相接而不重叠", async () => {
+    const create = async (name: string, startDate: string, endDate: string | null, enabled = 1) =>
+      (await request(app).post("/api/templates").set(admin).send({ templateName: name, startDate, endDate, enabled })).body.data.id as number;
+    const first = await create("条件甲", "2035-01-01", "2035-01-31");
+    const second = await create("条件乙", "2035-02-01", "2035-02-28");
+    const third = await create("条件丙", "2035-01-31", null);
+    const fields = { orgId: 1, empTypeCode: "PART_TIME", postCode: "BETTING_SERVICE", priority: 0 };
+    expect((await request(app).post(`/api/templates/${first}/conditions`).set(admin).send(fields)).status).toBe(200);
+    expect((await request(app).post(`/api/templates/${second}/conditions`).set(admin).send(fields)).status).toBe(200);
+    expect((await request(app).post(`/api/templates/${first}/conditions`).set(admin).send(fields)).status).toBe(400);
+    const duplicate = await request(app).post(`/api/templates/${third}/conditions`).set(admin).send(fields);
+    expect(duplicate.status).toBe(400);
+    expect(duplicate.body.msg).toContain("条件甲");
+    const distinct = await request(app).post(`/api/templates/${third}/conditions`).set(admin).send({ ...fields, postCode: "CROWD_CONTROL" });
+    expect(distinct.status).toBe(200);
+    expect((await request(app).patch(`/api/templates/${third}/conditions/${distinct.body.data.id}`).set(admin).send({ postCode: "BETTING_SERVICE" })).status).toBe(400);
+    const secondCondition = (await request(app).get(`/api/templates/${second}/conditions`).set(admin)).body.data[0];
+    expect((await request(app).patch(`/api/templates/${second}/conditions/${secondCondition.id}`).set(admin).send({ priority: 1 })).status).toBe(200);
+    expect((await request(app).patch(`/api/templates/${second}`).set(admin).send({ startDate: "2035-01-31" })).status).toBe(400);
+    expect((await request(app).patch(`/api/templates/${second}`).set(admin).send({ enabled: 0, startDate: "2035-01-31" })).status).toBe(200);
+    expect((await request(app).patch(`/api/templates/${second}`).set(admin).send({ enabled: 1 })).status).toBe(400);
+  });
+
+  it("同一员工在重叠日期只能直绑一个启用模板，批量失败不部分写入", async () => {
+    const by = { createdBy: 9001, updatedBy: 9001 };
+    await prisma.dtaEmployee.createMany({ data: [601, 602].map((id) => ({ id, tenantId: 1, orgId: 1, empName: `Direct ${id}`, empTypeCode: "FULL_TIME", postCode: "BETTING_SERVICE", ...by })) });
+    const create = async (name: string, startDate: string, endDate: string | null, enabled = 1) =>
+      (await request(app).post("/api/templates").set(admin).send({ templateName: name, startDate, endDate, enabled })).body.data.id as number;
+    const first = await create("直绑甲", "2036-01-01", "2036-01-31");
+    const second = await create("直绑乙", "2036-02-01", "2036-02-28");
+    const third = await create("直绑丙", "2036-01-31", null);
+    expect((await request(app).post(`/api/templates/${first}/employees`).set(admin).send({ empIds: [601] })).status).toBe(200);
+    expect((await request(app).post(`/api/templates/${first}/employees`).set(admin).send({ empIds: [601] })).status).toBe(200);
+    expect((await request(app).post(`/api/templates/${second}/employees`).set(admin).send({ empIds: [601] })).status).toBe(200);
+    const conflict = await request(app).post(`/api/templates/${third}/employees`).set(admin).send({ empIds: [602, 601] });
+    expect(conflict.status).toBe(400);
+    expect(conflict.body.msg).toContain("直绑甲");
+    expect((await request(app).get(`/api/templates/${third}/employees`).set(admin)).body.data).toEqual([]);
+    expect((await request(app).patch(`/api/templates/${second}`).set(admin).send({ startDate: "2036-01-31" })).status).toBe(400);
+    expect((await request(app).patch(`/api/templates/${second}`).set(admin).send({ enabled: 0, startDate: "2036-01-31" })).status).toBe(200);
+    expect((await request(app).patch(`/api/templates/${second}`).set(admin).send({ enabled: 1 })).status).toBe(400);
   });
 });

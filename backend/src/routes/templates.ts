@@ -90,6 +90,45 @@ async function checkConditionOrg(orgId: number | null): Promise<void> {
   if (!org) bad("模板条件中的组织不存在");
 }
 
+type TemplateWindow = { id: number; templateName: string; startDate: string; endDate: string | null; enabled: number };
+type MatchCondition = { orgId: number | null; empTypeCode: string | null; postCode: string | null };
+
+function windowsOverlap(a: TemplateWindow, b: TemplateWindow): boolean {
+  return (a.endDate === null || b.startDate <= a.endDate) && (b.endDate === null || a.startDate <= b.endDate);
+}
+
+async function checkConditionConflict(template: TemplateWindow, fields: MatchCondition, excludeId?: number): Promise<void> {
+  if (!template.enabled) return;
+  const conditions = await prisma.dtaTemplateCondition.findMany({ where: { tenantId: TENANT_ID, isDeleted: 0, ...(excludeId === undefined ? {} : { id: { not: excludeId } }) } });
+  const equal = conditions.filter((row) => row.orgId === fields.orgId && row.empTypeCode === fields.empTypeCode && row.postCode === fields.postCode);
+  if (!equal.length) return;
+  const templates = await prisma.dtaTemplate.findMany({ where: { tenantId: TENANT_ID, isDeleted: 0, enabled: 1, id: { in: equal.map((row) => row.templateId) } } });
+  const conflict = templates.find((row) => windowsOverlap(template, row));
+  if (conflict) bad(`相同筛选条件在重叠生效日期内已关联模板“${conflict.templateName}”，请调整条件或模板生效日期。`);
+}
+
+async function checkEmployeeConflicts(template: TemplateWindow, empIds: number[]): Promise<void> {
+  if (!template.enabled || empIds.length === 0) return;
+  const associations = await prisma.dtaTemplateEmployee.findMany({ where: { tenantId: TENANT_ID, empId: { in: empIds }, templateId: { not: template.id }, isDeleted: 0 } });
+  if (!associations.length) return;
+  const templates = await prisma.dtaTemplate.findMany({ where: { tenantId: TENANT_ID, isDeleted: 0, enabled: 1, id: { in: associations.map((row) => row.templateId) } } });
+  const conflict = associations.find((row) => templates.some((other) => other.id === row.templateId && windowsOverlap(template, other)));
+  if (conflict) {
+    const other = templates.find((row) => row.id === conflict.templateId)!;
+    bad(`员工 ${conflict.empId} 在重叠生效日期内已直接关联模板“${other.templateName}”，请先解除原关联或调整模板生效日期。`);
+  }
+}
+
+async function checkTemplateAssociations(template: TemplateWindow): Promise<void> {
+  if (!template.enabled) return;
+  const [conditions, associations] = await Promise.all([
+    prisma.dtaTemplateCondition.findMany({ where: { tenantId: TENANT_ID, templateId: template.id, isDeleted: 0 } }),
+    prisma.dtaTemplateEmployee.findMany({ where: { tenantId: TENANT_ID, templateId: template.id, isDeleted: 0 } }),
+  ]);
+  for (const condition of conditions) await checkConditionConflict(template, condition, condition.id);
+  await checkEmployeeConflicts(template, associations.map((row) => row.empId));
+}
+
 templatesRouter.get("/", requireRole("admin", "manager"), async (_req, res, next) => {
   try {
     const rows = await prisma.dtaTemplate.findMany({ where: { tenantId: TENANT_ID, isDeleted: 0 }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }] });
@@ -127,6 +166,9 @@ templatesRouter.patch("/:id", requireRole("admin", "manager"), async (req, res, 
   try {
     const current = await templateOf(parseId(req.params.id, "id"));
     const fields = templateFields(bodyOf(req), current);
+    if (fields.startDate !== current.startDate || fields.endDate !== current.endDate || (current.enabled === 0 && fields.enabled === 1)) {
+      await checkTemplateAssociations({ id: current.id, ...fields });
+    }
     const row = await prisma.dtaTemplate.update({ where: { id: current.id }, data: { ...fields, updatedBy: req.identity!.userId } });
     ok(res, row, "模板已更新");
   } catch (error) { next(error); }
@@ -191,6 +233,7 @@ templatesRouter.post("/:id/conditions", requireRole("admin", "manager"), async (
     const template = await templateOf(parseId(req.params.id, "id"));
     const fields = conditionFields(bodyOf(req));
     await checkConditionOrg(fields.orgId);
+    await checkConditionConflict(template, fields);
     const row = await prisma.dtaTemplateCondition.create({ data: { tenantId: TENANT_ID, templateId: template.id, ...fields, createdBy: req.identity!.userId, updatedBy: req.identity!.userId } });
     ok(res, row, "模板条件已创建");
   } catch (error) { next(error); }
@@ -202,6 +245,7 @@ templatesRouter.patch("/:id/conditions/:conditionId", requireRole("admin", "mana
     const current = await conditionOf(template.id, parseId(req.params.conditionId, "conditionId"));
     const fields = conditionFields(bodyOf(req), current);
     await checkConditionOrg(fields.orgId);
+    await checkConditionConflict(template, fields, current.id);
     const row = await prisma.dtaTemplateCondition.update({ where: { id: current.id }, data: { ...fields, updatedBy: req.identity!.userId } });
     ok(res, row, "模板条件已更新");
   } catch (error) { next(error); }
@@ -233,19 +277,20 @@ templatesRouter.post("/:id/employees", requireRole("admin", "manager"), async (r
     const body = bodyOf(req);
     const ids = associationEmployeeIds(body);
     const priority = associationPriority(body.priority ?? 0);
-    const rows = [];
-    for (const empId of ids) {
-      await employeeForAssociation(req, empId);
-      const existing = await prisma.dtaTemplateEmployee.findFirst({ where: { tenantId: TENANT_ID, templateId: template.id, empId, isDeleted: 0 } });
-      if (existing) {
-        rows.push(await prisma.dtaTemplateEmployee.update({ where: { id: existing.id }, data: { priority, updatedBy: req.identity!.userId } }));
-        continue;
+    for (const empId of ids) await employeeForAssociation(req, empId);
+    await checkEmployeeConflicts(template, ids);
+    const rows = await prisma.$transaction(async (tx) => {
+      const saved = [];
+      for (const empId of ids) {
+        const existing = await tx.dtaTemplateEmployee.findFirst({ where: { tenantId: TENANT_ID, templateId: template.id, empId, isDeleted: 0 } });
+        if (existing) { saved.push(existing); continue; }
+        const deleted = await tx.dtaTemplateEmployee.findFirst({ where: { tenantId: TENANT_ID, templateId: template.id, empId, isDeleted: 1 } });
+        saved.push(deleted
+          ? await tx.dtaTemplateEmployee.update({ where: { id: deleted.id }, data: { priority, isDeleted: 0, updatedBy: req.identity!.userId } })
+          : await tx.dtaTemplateEmployee.create({ data: { tenantId: TENANT_ID, templateId: template.id, empId, priority, createdBy: req.identity!.userId, updatedBy: req.identity!.userId } }));
       }
-      const deleted = await prisma.dtaTemplateEmployee.findFirst({ where: { tenantId: TENANT_ID, templateId: template.id, empId, isDeleted: 1 } });
-      rows.push(deleted
-        ? await prisma.dtaTemplateEmployee.update({ where: { id: deleted.id }, data: { priority, isDeleted: 0, updatedBy: req.identity!.userId } })
-        : await prisma.dtaTemplateEmployee.create({ data: { tenantId: TENANT_ID, templateId: template.id, empId, priority, createdBy: req.identity!.userId, updatedBy: req.identity!.userId } }));
-    }
+      return saved;
+    });
     ok(res, { associations: rows, created: rows.length }, "员工直绑已保存");
   } catch (error) { next(error); }
 });

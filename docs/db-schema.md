@@ -244,7 +244,7 @@ Demo 不增加班组、职级或自定义字段。
 | created_at / updated_at | datetime | 创建与更新时间 |
 | created_by / updated_by | int | 创建与更新人 |
 
-单条条件至少一个匹配字段非空。非空字段之间使用 AND 关系。
+单条条件至少一个匹配字段非空。非空字段之间使用 AND 关系。启用模板的生效日期区间重叠（含起止日）时，组织、员工类型、岗位三项均相同的有效条件只能存在一条；新增/修改条件、调整模板日期和重新启用模板均在服务层校验。不同条件可以同时命中员工，仍按条件优先级选择。
 
 ## 12. dta_template_employee 模板员工直绑
 
@@ -254,12 +254,12 @@ Demo 不增加班组、职级或自定义字段。
 | tenant_id | int | 租户 ID |
 | template_id | int | 模板 ID |
 | emp_id | int | 员工 ID |
-| priority | int | 数字越小优先级越高；同一员工存在多个直绑模板时使用 |
+| priority | int | 历史兼容字段；新流程同一员工在重叠日期内只能直绑一个启用模板，不向用户展示优先级 |
 | is_deleted | int | 默认 0，支持删除后重新关联 |
 | created_at / updated_at | datetime | 创建与更新时间 |
 | created_by / updated_by | int | 创建与更新人 |
 
-唯一约束：`tenant_id + template_id + emp_id + is_deleted`。员工直绑是模板条件匹配的特殊覆盖；生成时同一员工优先选择直绑模板，再按优先级、模板更新时间和模板 ID 决定。Demo 仅允许管理员或主管关联员工，主管只能关联所辖组织员工。
+唯一约束：`tenant_id + template_id + emp_id + is_deleted`。员工直绑是模板条件匹配的特殊覆盖；同一员工在生效日期重叠的启用模板中只能有一条直绑，生成时优先选直绑模板。新增直绑、调整模板日期及重新启用时在服务层校验；批量关联须全部通过后事务保存。Demo 仅允许管理员或主管关联员工，主管只能关联所辖组织员工。已生成记录不因调整关联而自动覆盖。
 
 ## 13. dta_rosterability_record 可排性记录
 
