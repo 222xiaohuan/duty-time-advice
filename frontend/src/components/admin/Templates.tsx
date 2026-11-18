@@ -114,10 +114,15 @@ export function Templates({ profile }: { profile: MockProfile }) {
     } catch (cause) { setError(errorText(cause)); } finally { setBusy(false); }
   }
 
-  async function removeTemplate() {
-    if (!selected || !window.confirm("删除此模板及其可排性明细？")) return;
+  async function removeTemplate(templateId: number, templateName?: string) {
+    if (!window.confirm(`删除模板“${templateName ?? "当前模板"}”及其可排性明细？`)) return;
     setBusy(true); setError("");
-    try { await apiDelete(`/templates/${selected}`, profile); await refreshList(); backToList(); setMessage("模板已删除"); } catch (cause) { setError(errorText(cause)); } finally { setBusy(false); }
+    try {
+      await apiDelete(`/templates/${templateId}`, profile);
+      await refreshList();
+      if (selected === templateId) backToList();
+      setMessage("模板已删除");
+    } catch (cause) { setError(errorText(cause)); } finally { setBusy(false); }
   }
 
   async function saveItem(event: React.FormEvent<HTMLFormElement>) {
@@ -167,7 +172,7 @@ export function Templates({ profile }: { profile: MockProfile }) {
       <div className="template-list-toolbar"><label className="template-search"><Search size={16} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索模板名称或描述" aria-label="搜索模板" /></label><span>{templates.length} 个模板</span></div>
       <section className="template-table-wrap" aria-label="周模板列表"><table className="template-table"><thead><tr><th>模板名称</th><th>模板描述</th><th>生效日期</th><th>失效日期</th><th>模板状态</th><th>操作</th></tr></thead><tbody>
         {loading && <tr><td colSpan={6} className="template-empty">正在加载模板</td></tr>}{!loading && filteredTemplates.length === 0 && <tr><td colSpan={6} className="template-empty">暂无模板</td></tr>}
-        {!loading && filteredTemplates.map((template) => <tr key={template.id}><td><button type="button" className="template-name-link" onClick={() => void openDetail(template.id)}>{template.templateName}<ChevronRight size={15} /></button></td><td className="template-description">{template.description || "—"}</td><td>{template.startDate}</td><td>{template.endDate || "—"}</td><td><span className={`template-status ${template.enabled ? "enabled" : "disabled"}`}>{template.enabled ? "启用" : "停用"}</span></td><td><div className="template-row-actions"><Button type="button" size="sm" variant="outline" onClick={() => openEdit(template)}><Pencil size={14} />编辑</Button><Button type="button" size="sm" variant="outline" onClick={() => void openAssociation(template)}><Link2 size={14} />关联人员</Button><Button type="button" size="sm" variant="outline" onClick={() => openGenerate(template)}><Sparkles size={14} />生成未来可排性</Button></div></td></tr>)}
+        {!loading && filteredTemplates.map((template) => <tr key={template.id}><td><button type="button" className="template-name-link" onClick={() => void openDetail(template.id)}>{template.templateName}<ChevronRight size={15} /></button></td><td className="template-description">{template.description || "—"}</td><td>{template.startDate}</td><td>{template.endDate || "—"}</td><td><span className={`template-status ${template.enabled ? "enabled" : "disabled"}`}>{template.enabled ? "启用" : "停用"}</span></td><td><div className="template-row-actions"><Button type="button" size="sm" variant="outline" onClick={() => openEdit(template)}><Pencil size={14} />编辑</Button><Button type="button" size="sm" variant="outline" onClick={() => void openAssociation(template)}><Link2 size={14} />关联人员</Button><Button type="button" size="sm" variant="outline" onClick={() => openGenerate(template)}><Sparkles size={14} />生成未来可排性</Button><Button type="button" size="sm" variant="outline" disabled={busy} onClick={() => void removeTemplate(template.id, template.templateName)}><Trash2 size={14} />删除</Button></div></td></tr>)}
       </tbody></table></section>
     </> : detail && <>
       <div className="template-detail-head"><Button type="button" variant="ghost" onClick={backToList}><ArrowLeft size={16} />返回模板列表</Button><div className="template-detail-actions"><Button type="button" variant="outline" onClick={() => openEdit(detail)}><Pencil size={15} />编辑基本信息</Button><Button type="button" variant="outline" onClick={() => void openAssociation(detail)}><Link2 size={15} />关联人员</Button><Button type="button" onClick={() => openGenerate(detail)}><Sparkles size={15} />生成未来可排性</Button></div></div>
@@ -176,7 +181,6 @@ export function Templates({ profile }: { profile: MockProfile }) {
         <form className="admin-inline-form" onSubmit={saveItem}><h4>{editingItem ? "编辑时段" : "添加时段"}</h4><div className="admin-form-grid"><label>星期<select value={item.weekday} onChange={(event) => setItem({ ...item, weekday: Number(event.target.value) })}>{weekdays.map((day, index) => <option value={index + 1} key={day}>{day}</option>)}</select></label><label>状态<select value={item.statusCode} onChange={(event) => setItem({ ...item, statusCode: event.target.value })}><option value={RosterabilityStatus.ROSTERABLE}>可排</option><option value={RosterabilityStatus.UNROSTERABLE}>不可排</option><option value={RosterabilityStatus.PRIORITY_ROSTERABLE}>优先排</option></select></label><label>开始<input type="time" required value={item.startTime} onChange={(event) => setItem({ ...item, startTime: event.target.value })} /></label><label>结束<input type="time" required value={item.endTime} onChange={(event) => setItem({ ...item, endTime: event.target.value })} /></label><label>结束日期<select value={item.endDayOffset} onChange={(event) => setItem({ ...item, endDayOffset: Number(event.target.value) })}><option value={0}>当天</option><option value={1}>次日（跨午夜）</option></select></label><label>备注<input maxLength={500} value={item.remark ?? ""} onChange={(event) => setItem({ ...item, remark: event.target.value })} /></label></div><div className="admin-actions"><Button type="submit" disabled={busy}><Save size={15} />{editingItem ? "保存时段" : "添加时段"}</Button>{editingItem && <Button type="button" variant="outline" onClick={() => { setEditingItem(null); setItem(blankItem); }}>取消</Button>}</div></form>
       </section>
       <section className="admin-section"><div className="admin-intro"><h3>关联条件</h3><span>当前模板已配置 {detail.conditions.length} 条条件，按优先级匹配员工</span></div><div className="condition-list">{detail.conditions.map((row) => <div className="condition-row" key={row.id}><strong>优先级 {row.priority}</strong><span>{orgLabel(row.orgId)} · {labelOf(employeeTypes, row.empTypeCode)} · {labelOf(posts, row.postCode)}</span><button type="button" onClick={() => void openAssociation(detail, row)}>编辑</button><button type="button" aria-label="删除条件" onClick={() => void deleteCondition(row.id)}>×</button></div>)}</div></section>
-      <div className="template-danger-zone"><Button type="button" variant="outline" disabled={busy} onClick={() => void removeTemplate()}><Trash2 size={15} />删除模板</Button></div>
     </>}
 
     {error && <p className="form-error" role="alert">{error}</p>}{message && <p className="form-success" role="status">{message}</p>}

@@ -189,7 +189,6 @@ button { cursor: pointer; }
 .template-detail-title { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding: 18px 0; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); }
 .template-detail-title h2 { margin: 0 0 5px; font-size: 20px; }
 .template-detail-title p { margin: 0; color: #788590; font-size: 12px; }
-.template-danger-zone { display: flex; justify-content: flex-end; padding-top: 4px; }
 .template-dialog { width: min(620px, calc(100vw - 28px)); max-height: min(86dvh, 760px); margin: auto; padding: 21px; overflow-y: auto; border: 1px solid var(--border); border-radius: 6px; background: #fff; color: #263a4a; box-shadow: 0 20px 60px #12263a33; }
 .template-dialog::backdrop { background: #102b4266; }
 .template-dialog-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; margin-bottom: 18px; }
