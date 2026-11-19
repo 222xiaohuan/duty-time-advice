@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Copy, Plus, Save, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Plus, Save, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiDelete, apiGet, apiPatch, apiPost, type SourceDictionaryItem } from "@/lib/api";
 import { errorText, weekdays } from "@/lib/admin";
@@ -16,6 +16,7 @@ type BatchResult = { businessDate: string; sourceId?: number | null; success: bo
 type BatchResponse = { created: number; failed: number; results: BatchResult[] };
 const initialForm = (date: string, statusCode: string): Form => ({ businessDate: date, statusCode, startTime: "09:00", endTime: "17:00", endDayOffset: 0, remark: "" });
 const statusClass = (code: string) => code === RosterabilityStatus.ROSTERABLE ? "rosterable" : code === RosterabilityStatus.PRIORITY_ROSTERABLE ? "priority" : "unrosterable";
+const baselineLabel = (rule?: string | null) => rule === "BASE_UNROSTERABLE" ? "默认全部不可排" : rule === "BASE_ROSTERABLE" ? "默认全部可排" : "默认可排性未配置";
 function submittedForm(element: HTMLFormElement, current: Form): Form {
   const values = new FormData(element);
   return { ...current,
@@ -34,6 +35,7 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
   const [selectedDay, setSelectedDay] = useState(() => hkToday());
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [batchMode, setBatchMode] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<Form>(() => initialForm(hkToday(), "ROSTERABLE"));
   const [loading, setLoading] = useState(true);
@@ -74,14 +76,15 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
   function chooseDay(day: string) {
     if (batchMode) {
       setSelectedDates((current) => current.includes(day) ? current.filter((item) => item !== day) : [...current, day].sort());
+      setEditorOpen(true);
       return;
     }
-    setSelectedDay(day); setEditingId(null); setForm(initialForm(day, config?.allowedStatuses[0]?.statusCode ?? "")); setError("");
+    setSelectedDay(day); setEditingId(null); setForm(initialForm(day, config?.allowedStatuses[0]?.statusCode ?? "")); setError(""); setEditorOpen(true);
   }
   function edit(row: RecordRow) {
     setBatchMode(false); setEditingId(row.id); setSelectedDay(row.businessDate);
     setForm({ businessDate: row.businessDate, statusCode: row.statusCode, startTime: hkTime(row.startTime), endTime: hkTime(row.endTime), endDayOffset: hkDate(row.endTime) === row.businessDate ? 0 : 1, remark: row.remark ?? "" });
-    setError("");
+    setError(""); setEditorOpen(true);
   }
   async function save(event: React.FormEvent) {
     event.preventDefault(); if (!canEdit || selectedLocked || !formStatusAllowed || baselineMessage) { if (baselineMessage) setError(baselineMessage); return; }
@@ -91,34 +94,34 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
       const payload = { ...entered, remark: entered.remark || null };
       if (editingId === null) await apiPost("/rosterability-records", profile, payload);
       else await apiPatch(`/rosterability-records/${editingId}`, profile, payload);
-      await loadRecords(); setEditingId(null); setMessage("时段已保存");
+      await loadRecords(); setEditingId(null); setEditorOpen(false); setMessage("时段已保存");
     } catch (cause) { setError(errorText(cause)); } finally { setBusy(false); }
   }
   async function remove(row: RecordRow) {
     if (!window.confirm("删除此时段？")) return;
     setBusy(true); setError(""); setMessage("");
-    try { await apiDelete(`/rosterability-records/${row.id}`, profile); await loadRecords(); setEditingId(null); setMessage("时段已删除"); }
+    try { await apiDelete(`/rosterability-records/${row.id}`, profile); await loadRecords(); setEditingId(null); setEditorOpen(false); setMessage("时段已删除"); }
     catch (cause) { setError(errorText(cause)); } finally { setBusy(false); }
   }
   async function runBatch(path: string, payload: unknown) {
     setBusy(true); setError(""); setMessage(""); setBatchResult(null);
     try {
       const result = await apiPost<BatchResponse>(path, profile, payload);
-      setBatchResult(result); await loadRecords(); setSelectedDates([]);
+      setBatchResult(result); await loadRecords(); setSelectedDates([]); setEditingId(null); setBatchMode(false); setEditorOpen(false);
       setMessage(`新增 ${result.created} 条，失败 ${result.failed} 条`);
     } catch (cause) { setError(errorText(cause)); } finally { setBusy(false); }
   }
   function moveWeek(shift: number) {
-    setMonday((current) => addDays(current, shift * 7)); setSelectedDates([]); setEditingId(null); setBatchResult(null);
+    setMonday((current) => addDays(current, shift * 7)); setSelectedDates([]); setEditingId(null); setBatchResult(null); setEditorOpen(false);
     const nextDay = addDays(monday, shift * 7); setSelectedDay(nextDay); setForm(initialForm(nextDay, config?.allowedStatuses[0]?.statusCode ?? ""));
   }
 
   return <div className="employee-page">
     <div className="employee-toolbar">
-      <div className="week-nav"><Button size="icon" variant="outline" title="上一周" aria-label="上一周" onClick={() => moveWeek(-1)}><ChevronLeft size={17} /></Button><strong>{shortDay(monday)} – {shortDay(addDays(monday, 6))}</strong><Button size="icon" variant="outline" title="下一周" aria-label="下一周" onClick={() => moveWeek(1)}><ChevronRight size={17} /></Button><Button size="sm" variant="ghost" onClick={() => { const today = hkToday(); const current = mondayOf(today); setMonday(current); setSelectedDay(today); setEditingId(null); setSelectedDates([]); setForm(initialForm(today, config?.allowedStatuses[0]?.statusCode ?? "")); }}>本周</Button></div>
+      <div className="week-nav"><Button size="icon" variant="outline" title="上一周" aria-label="上一周" onClick={() => moveWeek(-1)}><ChevronLeft size={17} /></Button><strong>{shortDay(monday)} – {shortDay(addDays(monday, 6))}</strong><Button size="icon" variant="outline" title="下一周" aria-label="下一周" onClick={() => moveWeek(1)}><ChevronRight size={17} /></Button><Button size="sm" variant="ghost" onClick={() => { const today = hkToday(); const current = mondayOf(today); setMonday(current); setSelectedDay(today); setEditingId(null); setSelectedDates([]); setEditorOpen(false); setForm(initialForm(today, config?.allowedStatuses[0]?.statusCode ?? "")); }}>本周</Button></div>
     </div>
-    {config && <div className="employee-context"><strong>{config.empName}</strong><span>{config.baselineRule === "BASE_ROSTERABLE" ? "默认可排" : "默认不可排"}</span><span>提前 {config.cutoffDays} 天锁定</span>{!config.empEditEnable && <span>员工编辑已关闭</span>}{config.submitMode === "MODE_NO_SUBMIT" && <span>无需提报</span>}</div>}
-    <div className="employee-batch-toolbar"><Button size="sm" variant="outline" disabled={busy || !canEdit} onClick={() => void runBatch("/rosterability-records/batch/copy-previous-week", {})}><Copy size={15} />复制上周至本周</Button><Button size="sm" variant="outline" disabled={busy || !canEdit} onClick={() => void runBatch("/rosterability-records/batch/copy-current-to-next", {})}><Copy size={15} />复制本周至下周</Button><Button size="sm" variant={batchMode ? "default" : "outline"} disabled={!canEdit} onClick={() => { setBatchMode((current) => !current); setSelectedDates([]); setBatchResult(null); }}>多日期设置</Button></div>
+    {config && <div className="employee-context"><strong>{config.empName}</strong><span>{baselineLabel(config.baselineRule)}</span><span>提前 {config.cutoffDays} 天锁定</span>{!config.empEditEnable && <span>员工编辑已关闭</span>}{config.submitMode === "MODE_NO_SUBMIT" && <span>无需提报</span>}</div>}
+    <details className="employee-quick-actions"><summary><Copy size={15} />快捷操作</summary><div className="employee-batch-toolbar"><Button size="sm" variant="outline" disabled={busy || !canEdit} onClick={() => void runBatch("/rosterability-records/batch/copy-previous-week", {})}>复制上周至本周</Button><Button size="sm" variant="outline" disabled={busy || !canEdit} onClick={() => void runBatch("/rosterability-records/batch/copy-current-to-next", {})}>复制本周至下周</Button><Button size="sm" variant={batchMode ? "default" : "outline"} disabled={!canEdit} onClick={() => { const next = !batchMode; setBatchMode(next); setEditingId(null); setSelectedDates([]); setBatchResult(null); setEditorOpen(next); }}>多日期统一设置</Button></div></details>
     {loading ? <div className="employee-loading">正在加载周记录</div> : <div className="employee-week" role="group" aria-label="周日历">{dates.map((day, index) => {
       const locked = config ? dayLocked(day, config.cutoffDays) : true;
       const dayRecords = records.filter((row) => row.businessDate === day);
@@ -127,9 +130,10 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
         <div className="employee-day-entries">{dayRecords.map((row) => <button type="button" className={`employee-entry ${statusClass(row.statusCode)}`} key={row.id} onClick={() => edit(row)}><strong>{config?.allowedStatuses.find((status) => status.statusCode === row.statusCode)?.statusName ?? row.statusCode}</strong><span>{hkTime(row.startTime)}–{hkDate(row.endTime) !== day ? "次日 " : ""}{hkTime(row.endTime)}</span></button>)}{dayRecords.length === 0 && <span className="day-empty">无记录</span>}</div>
       </section>;
     })}</div>}
-    <div className="employee-lower">
+    <div className={`employee-lower ${editorOpen ? "employee-editor-open" : ""}`}>
       <section className="employee-editor">
-        <div className="admin-intro"><h2>{batchMode ? "多日期统一设置" : editingId ? "编辑时段" : "新增时段"}</h2><span>{batchMode ? `${selectedDates.length} 个日期` : selectedDay}</span></div>
+        <div className="admin-intro"><div><h2>{batchMode ? "多日期统一设置" : editingId ? "编辑时段" : "新增时段"}</h2><span>{batchMode ? `${selectedDates.length} 个日期` : selectedDay}</span></div><Button type="button" variant="ghost" size="icon" className="employee-editor-close" title="关闭维护面板" aria-label="关闭维护面板" onClick={() => setEditorOpen(false)}><X size={17} /></Button></div>
+        {config && <div className="employee-status-guide"><span>默认：{baselineLabel(config.baselineRule)}</span><span>可维护：{config.allowedStatuses.length ? config.allowedStatuses.map((status) => status.statusName).join("、") : "无"}</span></div>}
         {batchMode ? <form onSubmit={(event) => { event.preventDefault(); if (selectedDates.length && !baselineMessage) { const entered = submittedForm(event.currentTarget, form); void runBatch("/rosterability-records/batch/set-dates", { dates: selectedDates, statusCode: entered.statusCode, startTime: entered.startTime, endTime: entered.endTime, endDayOffset: entered.endDayOffset, remark: entered.remark || null }); } else if (baselineMessage) setError(baselineMessage); }} className="employee-form">
           <RecordFields form={form} setForm={setForm} statuses={config?.allowedStatuses ?? []} disabled={!canEdit || busy} />
           {baselineMessage && <p className="form-error" role="alert">{baselineMessage}</p>}<Button type="submit" disabled={!canEdit || !formStatusAllowed || Boolean(baselineMessage) || busy || selectedDates.length === 0}><Save size={16} />应用到所选日期</Button>
