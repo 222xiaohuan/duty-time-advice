@@ -294,8 +294,9 @@ button { cursor: pointer; }
 .batch-fail { color: #a52b35; }
 
 .manager-page { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
-.manager-toolbar, .manager-period, .manager-period-nav, .manager-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.manager-toolbar, .manager-period, .manager-period-nav, .manager-editor-head, .manager-toolbar-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .manager-toolbar { flex-wrap: wrap; }
+.manager-toolbar-actions { flex-wrap: wrap; justify-content: flex-end; }
 .manager-tabs { display: flex; flex-wrap: wrap; gap: 3px; border-bottom: 1px solid var(--border); }
 .manager-tabs button { min-height: 39px; padding: 0 12px; border: 0; border-bottom: 2px solid transparent; background: transparent; color: #556675; font-size: 13px; }
 .manager-tabs button.selected { border-bottom-color: #0c336a; color: #0c336a; font-weight: 700; }

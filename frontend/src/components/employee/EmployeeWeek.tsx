@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Copy, Download, Plus, Save, Trash2, Upload } from "lucide-react";
+import { ChevronLeft, ChevronRight, Copy, Plus, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiDelete, apiGet, apiPatch, apiPost, type SourceDictionaryItem } from "@/lib/api";
 import { errorText, weekdays } from "@/lib/admin";
@@ -116,7 +116,6 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
   return <div className="employee-page">
     <div className="employee-toolbar">
       <div className="week-nav"><Button size="icon" variant="outline" title="上一周" aria-label="上一周" onClick={() => moveWeek(-1)}><ChevronLeft size={17} /></Button><strong>{shortDay(monday)} – {shortDay(addDays(monday, 6))}</strong><Button size="icon" variant="outline" title="下一周" aria-label="下一周" onClick={() => moveWeek(1)}><ChevronRight size={17} /></Button><Button size="sm" variant="ghost" onClick={() => { const today = hkToday(); const current = mondayOf(today); setMonday(current); setSelectedDay(today); setEditingId(null); setSelectedDates([]); setForm(initialForm(today, config?.allowedStatuses[0]?.statusCode ?? "")); }}>本周</Button></div>
-      <div className="employee-toolbar-actions"><Button size="sm" variant="outline" onClick={() => { setMessage("Demo 版本未开放，标准产品提供批量导入导出能力"); setBatchResult(null); }}><Upload size={15} />导入</Button><Button size="sm" variant="outline" onClick={() => { setMessage("Demo 版本未开放，标准产品提供批量导入导出能力"); setBatchResult(null); }}><Download size={15} />导出</Button></div>
     </div>
     {config && <div className="employee-context"><strong>{config.empName}</strong><span>{config.baselineRule === "BASE_ROSTERABLE" ? "默认可排" : "默认不可排"}</span><span>提前 {config.cutoffDays} 天锁定</span>{!config.empEditEnable && <span>员工编辑已关闭</span>}{config.submitMode === "MODE_NO_SUBMIT" && <span>无需提报</span>}</div>}
     <div className="employee-batch-toolbar"><Button size="sm" variant="outline" disabled={busy || !canEdit} onClick={() => void runBatch("/rosterability-records/batch/copy-previous-week", {})}><Copy size={15} />复制上周至本周</Button><Button size="sm" variant="outline" disabled={busy || !canEdit} onClick={() => void runBatch("/rosterability-records/batch/copy-current-to-next", {})}><Copy size={15} />复制本周至下周</Button><Button size="sm" variant={batchMode ? "default" : "outline"} disabled={!canEdit} onClick={() => { setBatchMode((current) => !current); setSelectedDates([]); setBatchResult(null); }}>多日期设置</Button></div>

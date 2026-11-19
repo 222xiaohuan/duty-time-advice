@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, LockKeyhole, Plus, RefreshCw, Save, Trash2, X } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Download, LockKeyhole, Plus, RefreshCw, Save, Trash2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ManagerDayTimeline } from "@/components/manager/ManagerDayTimeline";
 import { apiDelete, apiGet, apiPatch, apiPost, type SourceDictionaryItem, type StatusDictionaryItem } from "@/lib/api";
@@ -133,6 +133,10 @@ export function ManagerRoster({ profile, statuses, sources }: { profile: MockPro
     setSelection(null);
     setEditingRecord(null); setRecordForm(newRecord());
   }
+  function showImportExportPlaceholder() {
+    setError("");
+    setNotice("Demo 版本未开放，标准产品提供批量导入导出能力");
+  }
   async function run(action: () => Promise<unknown>, success: string): Promise<boolean> {
     setBusy(true); setError(""); setNotice("");
     try { await action(); setNotice(success); setRefresh((value) => value + 1); return true; }
@@ -199,7 +203,7 @@ export function ManagerRoster({ profile, statuses, sources }: { profile: MockPro
   return <div className="manager-page">
     <div className="manager-toolbar">
       <div className="manager-tabs" role="tablist" aria-label="日历视图">{modes.map((item) => <button type="button" role="tab" aria-selected={mode === item.value} className={mode === item.value ? "selected" : ""} key={item.value} onClick={() => { setMode(item.value); setSelection(null); setPersonAddRequest(null); if (item.value === "person") setEmployeeFilter(""); }}>{item.label}</button>)}</div>
-      {mode !== "person" && <Button type="button" onClick={() => void generate()} disabled={busy || !directory}><CalendarDays size={16} />生成可排时段</Button>}
+      <div className="manager-toolbar-actions"><Button type="button" variant="outline" onClick={showImportExportPlaceholder}><Upload size={15} />导入</Button><Button type="button" variant="outline" onClick={showImportExportPlaceholder}><Download size={15} />导出</Button>{mode !== "person" && <Button type="button" onClick={() => void generate()} disabled={busy || !directory}><CalendarDays size={16} />生成可排时段</Button>}</div>
     </div>
     <div className="manager-filters">
       <label>组织<select value={directory?.orgId ?? ""} disabled><option value={directory?.orgId ?? ""}>{directory?.orgName ?? "加载中"}</option></select></label>
