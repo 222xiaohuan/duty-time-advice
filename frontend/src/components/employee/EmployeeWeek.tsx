@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Copy, Plus, Save, Trash2, X } from "lucide-react";
+import { useEffect, useRef, useState, type PointerEvent } from "react";
+import { ChevronLeft, ChevronRight, Copy, LockKeyhole, Plus, Save, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiDelete, apiGet, apiPatch, apiPost, type SourceDictionaryItem } from "@/lib/api";
 import { errorText, weekdays } from "@/lib/admin";
@@ -17,6 +17,13 @@ type BatchResponse = { created: number; failed: number; results: BatchResult[] }
 const initialForm = (date: string, statusCode: string): Form => ({ businessDate: date, statusCode, startTime: "09:00", endTime: "17:00", endDayOffset: 0, remark: "" });
 const statusClass = (code: string) => code === RosterabilityStatus.ROSTERABLE ? "rosterable" : code === RosterabilityStatus.PRIORITY_ROSTERABLE ? "priority" : "unrosterable";
 const baselineLabel = (rule?: string | null) => rule === "BASE_UNROSTERABLE" ? "默认全部不可排" : rule === "BASE_ROSTERABLE" ? "默认全部可排" : "默认可排性未配置";
+const statusColor = (code: string) => code === RosterabilityStatus.ROSTERABLE ? "#4a90e2" : code === RosterabilityStatus.PRIORITY_ROSTERABLE ? "#2e8b57" : "#a9a9a9";
+const timeOfMinute = (minute: number) => minute === 1440 ? "24:00" : `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+const minuteOfIso = (iso: string) => { const [hour, minute] = hkTime(iso).split(":").map(Number); return hour * 60 + minute; };
+const durationLabel = (start: string, end: string) => {
+  const minutes = Math.max(0, Math.round((new Date(end).getTime() - new Date(start).getTime()) / 60000));
+  return `${Number((minutes / 60).toFixed(1))}h`;
+};
 function submittedForm(element: HTMLFormElement, current: Form): Form {
   const values = new FormData(element);
   return { ...current,
@@ -73,13 +80,20 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
     return () => { active = false; };
   }, [profile, monday]);
 
+  function openDayEditor(day: string, startMinute = 540, endMinute = 1020) {
+    const start = Math.max(0, Math.min(1425, startMinute));
+    const end = Math.max(start + 15, Math.min(1440, endMinute));
+    setSelectedDay(day); setEditingId(null);
+    setForm({ ...initialForm(day, config?.allowedStatuses[0]?.statusCode ?? ""), startTime: timeOfMinute(start), endTime: end === 1440 ? "00:00" : timeOfMinute(end), endDayOffset: end === 1440 ? 1 : 0 });
+    setError(""); setEditorOpen(true);
+  }
   function chooseDay(day: string) {
     if (batchMode) {
       setSelectedDates((current) => current.includes(day) ? current.filter((item) => item !== day) : [...current, day].sort());
       setEditorOpen(true);
       return;
     }
-    setSelectedDay(day); setEditingId(null); setForm(initialForm(day, config?.allowedStatuses[0]?.statusCode ?? "")); setError(""); setEditorOpen(true);
+    openDayEditor(day);
   }
   function edit(row: RecordRow) {
     setBatchMode(false); setEditingId(row.id); setSelectedDay(row.businessDate);
@@ -121,13 +135,17 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
       <div className="week-nav"><Button size="icon" variant="outline" title="上一周" aria-label="上一周" onClick={() => moveWeek(-1)}><ChevronLeft size={17} /></Button><strong>{shortDay(monday)} – {shortDay(addDays(monday, 6))}</strong><Button size="icon" variant="outline" title="下一周" aria-label="下一周" onClick={() => moveWeek(1)}><ChevronRight size={17} /></Button><Button size="sm" variant="ghost" onClick={() => { const today = hkToday(); const current = mondayOf(today); setMonday(current); setSelectedDay(today); setEditingId(null); setSelectedDates([]); setEditorOpen(false); setForm(initialForm(today, config?.allowedStatuses[0]?.statusCode ?? "")); }}>本周</Button></div>
     </div>
     {config && <div className="employee-context"><strong>{config.empName}</strong><span>{baselineLabel(config.baselineRule)}</span><span>提前 {config.cutoffDays} 天锁定</span>{!config.empEditEnable && <span>员工编辑已关闭</span>}{config.submitMode === "MODE_NO_SUBMIT" && <span>无需提报</span>}</div>}
+    {config && <div className="employee-status-legend" aria-label="可排性状态说明"><span>可维护状态</span>{config.allowedStatuses.length ? config.allowedStatuses.map((status) => <span className={`employee-status-legend-item ${statusClass(status.statusCode)}`} key={status.statusCode}><i style={{ backgroundColor: status.colorHex ?? statusColor(status.statusCode) }} />{status.statusName}</span>) : <span>无</span>}</div>}
     <details className="employee-quick-actions"><summary><Copy size={15} />快捷操作</summary><div className="employee-batch-toolbar"><Button size="sm" variant="outline" disabled={busy || !canEdit} onClick={() => void runBatch("/rosterability-records/batch/copy-previous-week", {})}>复制上周至本周</Button><Button size="sm" variant="outline" disabled={busy || !canEdit} onClick={() => void runBatch("/rosterability-records/batch/copy-current-to-next", {})}>复制本周至下周</Button><Button size="sm" variant={batchMode ? "default" : "outline"} disabled={!canEdit} onClick={() => { const next = !batchMode; setBatchMode(next); setEditingId(null); setSelectedDates([]); setBatchResult(null); setEditorOpen(next); }}>多日期统一设置</Button></div></details>
     {loading ? <div className="employee-loading">正在加载周记录</div> : <div className="employee-week" role="group" aria-label="周日历">{dates.map((day, index) => {
       const locked = config ? dayLocked(day, config.cutoffDays) : true;
       const dayRecords = records.filter((row) => row.businessDate === day);
       return <section className={`employee-day ${selectedDay === day && !batchMode ? "selected" : ""} ${locked ? "locked" : ""}`} key={day}>
         <button type="button" className="employee-day-head" onClick={() => chooseDay(day)} aria-pressed={batchMode ? selectedDates.includes(day) : selectedDay === day}><span><strong>{weekdays[index]}</strong><small>{shortDay(day)}</small></span><span className="day-head-side">{batchMode ? <input type="checkbox" tabIndex={-1} readOnly checked={selectedDates.includes(day)} /> : locked ? "只读" : <Plus size={15} />}</span></button>
-        <div className="employee-day-entries">{dayRecords.map((row) => <button type="button" className={`employee-entry ${statusClass(row.statusCode)}`} key={row.id} onClick={() => edit(row)}><strong>{config?.allowedStatuses.find((status) => status.statusCode === row.statusCode)?.statusName ?? row.statusCode}</strong><span>{hkTime(row.startTime)}–{hkDate(row.endTime) !== day ? "次日 " : ""}{hkTime(row.endTime)}</span></button>)}{dayRecords.length === 0 && <span className="day-empty">无记录</span>}</div>
+        <div className="employee-day-entries">
+          <EmployeeDayTimeline day={day} records={dayRecords} config={config} locked={locked} canDrag={canEdit && !batchMode} onCreate={(start, end) => openDayEditor(day, start, end)} onEdit={edit} />
+          <div className="employee-entry-list">{dayRecords.map((row) => <button type="button" className={`employee-entry ${statusClass(row.statusCode)}`} key={row.id} onClick={() => edit(row)}><strong>{config?.allowedStatuses.find((status) => status.statusCode === row.statusCode)?.statusName ?? row.statusCode}</strong><span>{hkTime(row.startTime)}–{hkDate(row.endTime) !== day ? "次日 " : ""}{hkTime(row.endTime)}</span></button>)}{dayRecords.length === 0 && <span className="day-empty">无记录</span>}</div>
+        </div>
       </section>;
     })}</div>}
     <div className={`employee-lower ${editorOpen ? "employee-editor-open" : ""}`}>
@@ -147,6 +165,77 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
     </div>
     {error && <p className="form-error" role="alert">{error}</p>}{message && <p className="form-success" role="status">{message}</p>}
     {batchResult && <section className="batch-results" aria-label="批量操作结果"><h2>逐项结果</h2>{batchResult.results.length === 0 && <p className="muted-text">没有可复制的记录</p>}{batchResult.results.map((result, index) => <div className={result.success ? "batch-ok" : "batch-fail"} key={`${result.businessDate}-${result.sourceId ?? index}`}><strong>{result.businessDate}</strong><span>{result.success ? "已新增" : result.message ?? "失败"}</span></div>)}</section>}
+  </div>;
+}
+
+type EmployeeTimelineProps = {
+  day: string;
+  records: RecordRow[];
+  config: Config | null;
+  locked: boolean;
+  canDrag: boolean;
+  onCreate: (start: number, end: number) => void;
+  onEdit: (row: RecordRow) => void;
+};
+
+function EmployeeDayTimeline({ day, records, config, locked, canDrag, onCreate, onEdit }: EmployeeTimelineProps) {
+  const dragRef = useRef<{ pointerId: number; start: number; end: number } | null>(null);
+  const [drag, setDrag] = useState<{ start: number; end: number } | null>(null);
+  const hours = [0, 4, 8, 12, 16, 20, 24];
+  const baseline = config?.baselineRule === "BASE_ROSTERABLE" ? "rosterable" : config?.baselineRule === "BASE_UNROSTERABLE" ? "unrosterable" : "none";
+  const baselineText = !config ? "暂无可排性参数" : locked ? (day < hkToday() ? "无法修改过去日期的可排时间" : "已提前锁定可排时间") : baselineLabel(config.baselineRule);
+  const labelStatus = (code: string) => config?.allowedStatuses.find((status) => status.statusCode === code)?.statusName ?? code;
+  const rangeFor = (row: RecordRow) => {
+    const start = minuteOfIso(row.startTime);
+    const overnight = hkDate(row.endTime) !== row.businessDate;
+    const end = overnight ? 1440 : minuteOfIso(row.endTime);
+    return { start, end: Math.max(start + 15, end) };
+  };
+  const minuteAt = (event: PointerEvent<HTMLDivElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    return Math.max(0, Math.min(1440, Math.round((event.clientX - rect.left) / rect.width * 96) * 15));
+  };
+  const overlaps = (start: number, end: number) => records.some((row) => {
+    const range = rangeFor(row);
+    return start < range.end && end > range.start;
+  });
+  function pointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (!canDrag || locked || event.button !== 0) return;
+    const start = Math.min(1425, minuteAt(event));
+    if (overlaps(start, start + 15)) return;
+    const next = { pointerId: event.pointerId, start, end: start + 15 };
+    dragRef.current = next; setDrag(next); event.currentTarget.setPointerCapture(event.pointerId); event.preventDefault();
+  }
+  function pointerMove(event: PointerEvent<HTMLDivElement>) {
+    const current = dragRef.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    const pointer = minuteAt(event);
+    const next = { start: Math.min(current.start, pointer), end: Math.max(current.start + 15, pointer) };
+    setDrag(next);
+  }
+  function pointerUp(event: PointerEvent<HTMLDivElement>) {
+    const current = dragRef.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    const pointer = minuteAt(event);
+    let start = Math.min(current.start, pointer);
+    let end = Math.max(current.start, pointer);
+    if (start === end) end = Math.min(1440, start + 15);
+    if (start === 1440) { start = 1425; end = 1440; }
+    dragRef.current = null; setDrag(null);
+    if (end > start && !overlaps(start, end)) onCreate(start, end);
+  }
+  return <div className={`employee-day-timeline ${locked ? "locked" : ""}`}>
+    <div className="employee-timeline-ruler" aria-hidden="true">{hours.map((hour) => <span key={hour} style={{ left: `${hour / 24 * 100}%` }}>{String(hour).padStart(2, "0")}</span>)}</div>
+    <div className={`employee-timeline-track baseline-${baseline} ${locked ? "locked" : ""}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={() => { dragRef.current = null; setDrag(null); }} aria-label={`${day} 可排性时间轴`}>
+      <span className="employee-timeline-baseline">{locked && <LockKeyhole size={12} strokeWidth={2.2} />}{baselineText}</span>
+      {records.map((row) => {
+        const range = rangeFor(row);
+        const overnight = hkDate(row.endTime) !== row.businessDate;
+        const label = `${labelStatus(row.statusCode)} ${hkTime(row.startTime)}–${overnight ? "次日 " : ""}${hkTime(row.endTime)} · ${durationLabel(row.startTime, row.endTime)}`;
+        return <button type="button" className={`employee-timeline-record ${statusClass(row.statusCode)}`} key={row.id} style={{ left: `${range.start / 1440 * 100}%`, width: `${Math.max(1.4, (range.end - range.start) / 1440 * 100)}%`, backgroundColor: config?.allowedStatuses.find((status) => status.statusCode === row.statusCode)?.colorHex ?? statusColor(row.statusCode) }} title={label} aria-label={`${day} ${label}`} onPointerDown={(event) => event.stopPropagation()} onClick={() => onEdit(row)}><span>{label}</span></button>;
+      })}
+      {drag && <span className="employee-timeline-draft" style={{ left: `${Math.min(drag.start, drag.end) / 1440 * 100}%`, width: `${Math.max(1.4, (Math.max(drag.start, drag.end) - Math.min(drag.start, drag.end)) / 1440 * 100)}%` }}><span>待维护 {timeOfMinute(Math.min(drag.start, drag.end))}–{timeOfMinute(Math.max(drag.start, drag.end))}</span></span>}
+    </div>
   </div>;
 }
 
