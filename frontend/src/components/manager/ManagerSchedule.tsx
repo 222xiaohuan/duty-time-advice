@@ -217,10 +217,27 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
     event.preventDefault();
   }
 
+  function dragTouchesUnavailable(employee: Employee, start: number, end: number): boolean {
+    const first = Math.min(start, end);
+    const last = Math.min(1425, Math.max(start, end));
+    for (let minute = first; minute <= last; minute += 15) {
+      if (availabilityState(employee, records, day, minute) === RosterabilityStatus.UNROSTERABLE) return true;
+    }
+    return false;
+  }
+
   function dayPointerMove(event: PointerEvent<HTMLDivElement>) {
     const current = dragRef.current;
     if (!current || current.pointerId !== event.pointerId) return;
     const end = dayPointerMinute(event);
+    const employee = directory?.employees.find((item) => item.id === current.empId);
+    if (employee && dragTouchesUnavailable(employee, current.start, end)) {
+      dragRef.current = null;
+      setDragRange(null);
+      setError("排班时间不能进入不可排区间，请选择其他可排时间");
+      try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* synthetic pointer events may not have an active capture target */ }
+      return;
+    }
     const next = { ...current, end };
     dragRef.current = next;
     setDragRange({ start: Math.min(next.start, next.end), end: Math.max(next.start, next.end) });
@@ -234,10 +251,8 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
     const finish = Math.max(current.start, end) === start ? Math.min(1440, start + 15) : Math.max(current.start, end);
     dragRef.current = null;
     setDragRange({ start, end: finish });
-    for (let minute = start; minute < finish; minute += 15) {
-      if (availabilityState(employee, records, day, minute) === RosterabilityStatus.UNROSTERABLE) {
-        setDragRange(null); setError("不可排时间段无法排入模拟班次"); return;
-      }
+    if (dragTouchesUnavailable(employee, start, finish)) {
+      setDragRange(null); setError("排班时间不能进入不可排区间，请选择其他可排时间"); return;
     }
     setError(""); setSelection({ empId: employee.id, day }); setPresetSearch(""); setDialogMode("catalog");
   }

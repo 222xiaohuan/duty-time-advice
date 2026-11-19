@@ -316,17 +316,17 @@ button { cursor: pointer; }
 .schedule-day-ruler span { position: absolute; top: 13px; transform: translateX(-50%); font-size: 11px; }
 .schedule-day-ruler span:first-child { transform: none; }
 .schedule-day-row { display: contents; }
-.schedule-day-person { position: sticky; left: 0; z-index: 3; display: flex; flex-direction: column; justify-content: center; gap: 4px; min-height: 88px; padding: 10px 12px; border-right: 1px solid #d4dee6; border-bottom: 1px solid #e0e7eb; background: #fff; }
+.schedule-day-person { position: sticky; left: 0; z-index: 3; display: flex; flex-direction: column; justify-content: center; gap: 4px; min-height: 76px; padding: 10px 12px; border-right: 1px solid #d4dee6; border-bottom: 1px solid #e0e7eb; background: #fff; }
 .schedule-day-person strong { color: #263a4a; font-size: 12px; }
 .schedule-day-person small { color: #788590; font-size: 10px; overflow-wrap: anywhere; }
-.schedule-day-body { min-height: 88px; border-bottom: 1px solid #e0e7eb; }
+.schedule-day-body { min-height: 76px; border-bottom: 1px solid #e0e7eb; }
 .schedule-day-availability, .schedule-day-track { position: relative; min-width: 0; background-image: linear-gradient(to right, #e4eaef 1px, transparent 1px); background-size: calc(100% / 24) 100%; }
-.schedule-day-availability { height: 25px; border-bottom: 1px solid #e0e7eb; }
-.schedule-day-availability-segment { position: absolute; top: 4px; bottom: 4px; display: flex; align-items: center; justify-content: center; min-width: 1px; overflow: hidden; border-radius: 2px; color: #fff; font-size: 10px; white-space: nowrap; }
+.schedule-day-availability { height: 12px; border-bottom: 1px solid #e0e7eb; }
+.schedule-day-availability-segment { position: absolute; top: 2px; bottom: 2px; min-width: 1px; overflow: hidden; border-radius: 1px; }
 .schedule-day-availability-segment.rosterable { background: #4a90e2; }
 .schedule-day-availability-segment.priority { background: #2e8b57; }
 .schedule-day-availability-segment.unrosterable { background: #a9a9a9; color: #29343d; }
-.schedule-day-availability-segment b { overflow: hidden; text-overflow: ellipsis; font-weight: 600; }
+.schedule-day-availability-segment b { display: none; }
 .schedule-day-track { height: 62px; cursor: crosshair; touch-action: none; }
 .schedule-day-unavailable { position: absolute; inset-block: 0; z-index: 0; background: repeating-linear-gradient(135deg, rgba(110, 119, 128, .16) 0 2px, transparent 2px 9px), #f1f3f5; pointer-events: none; }
 .schedule-day-draft { position: absolute; top: 14px; z-index: 2; height: 34px; border: 2px solid #0c336a; border-radius: 3px; background: #6eafd855; pointer-events: none; }
