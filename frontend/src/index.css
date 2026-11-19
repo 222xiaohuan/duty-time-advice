@@ -330,7 +330,8 @@ button { cursor: pointer; }
 .schedule-day-availability-segment b { display: none; }
 .schedule-day-track { height: 62px; cursor: crosshair; touch-action: none; }
 .schedule-day-unavailable { position: absolute; inset-block: 0; z-index: 0; background: repeating-linear-gradient(135deg, rgba(110, 119, 128, .16) 0 2px, transparent 2px 9px), #f1f3f5; pointer-events: none; }
-.schedule-day-draft { position: absolute; top: 14px; z-index: 2; height: 34px; border: 2px solid #0c336a; border-radius: 3px; background: #6eafd855; pointer-events: none; }
+.schedule-day-draft { position: absolute; top: 14px; z-index: 2; display: flex; align-items: center; justify-content: center; min-width: 12px; height: 34px; padding: 0 6px; overflow: hidden; border: 2px dashed #0c336a; border-radius: 3px; background: repeating-linear-gradient(135deg, rgba(110, 175, 216, .18) 0 2px, transparent 2px 8px), #f7fafc; color: #0c336a; pointer-events: none; }
+.schedule-day-draft > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .schedule-day-shift { position: absolute; top: 14px; z-index: 1; display: flex; align-items: center; justify-content: center; min-width: 8px; height: 34px; padding: 0 7px; overflow: hidden; border: 0; border-radius: 3px; background: #dce6ee; color: #294e6b; cursor: pointer; }
 .schedule-day-shift span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; }
 .schedule-day-shift:hover { background: #cbdce9; }

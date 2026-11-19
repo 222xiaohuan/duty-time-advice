@@ -86,6 +86,7 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
   const [selection, setSelection] = useState<Selection | null>(null);
   const [dragRange, setDragRange] = useState<DragRange | null>(null);
   const dragRef = useRef<{ pointerId: number; empId: number; start: number; end: number } | null>(null);
+  const dragWarningRef = useRef(false);
   const [selectedMarker, setSelectedMarker] = useState<MarkerSelection | null>(null);
   const [records, setRecords] = useState<RecordRow[]>([]);
   const [shifts, setShifts] = useState<ShiftRow[]>([]);
@@ -147,7 +148,7 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
   }, [directory, employeeFilter, typeFilter, postFilter, selection?.empId]);
 
   function closeDialog() {
-    setDialogMode(null); setSelection(null); setEditingId(null); setForm(blankShift()); setPresetSearch(""); setDragRange(null); dragRef.current = null;
+    setDialogMode(null); setSelection(null); setEditingId(null); setForm(blankShift()); setPresetSearch(""); setDragRange(null); dragRef.current = null; dragWarningRef.current = false;
   }
 
   function select(empId: number, day: string) {
@@ -212,6 +213,8 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
     }
     const start = Math.min(1425, dayPointerMinute(event));
     dragRef.current = { pointerId: event.pointerId, empId: employee.id, start, end: start + 15 };
+    dragWarningRef.current = false;
+    setError("");
     setDragRange({ start, end: start + 15 });
     try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* synthetic pointer events may not have an active capture target */ }
     event.preventDefault();
@@ -232,12 +235,11 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
     const end = dayPointerMinute(event);
     const employee = directory?.employees.find((item) => item.id === current.empId);
     if (employee && dragTouchesUnavailable(employee, current.start, end)) {
-      dragRef.current = null;
-      setDragRange(null);
-      setError("排班时间不能进入不可排区间，请选择其他可排时间");
-      try { event.currentTarget.releasePointerCapture(event.pointerId); } catch { /* synthetic pointer events may not have an active capture target */ }
+      if (!dragWarningRef.current) setError("排班时间不能进入不可排区间，请选择其他可排时间");
+      dragWarningRef.current = true;
       return;
     }
+    dragWarningRef.current = false;
     const next = { ...current, end };
     dragRef.current = next;
     setDragRange({ start: Math.min(next.start, next.end), end: Math.max(next.start, next.end) });
@@ -249,11 +251,15 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
     const end = dayPointerMinute(event);
     const start = Math.min(current.start, end);
     const finish = Math.max(current.start, end) === start ? Math.min(1440, start + 15) : Math.max(current.start, end);
-    dragRef.current = null;
-    setDragRange({ start, end: finish });
     if (dragTouchesUnavailable(employee, start, finish)) {
-      setDragRange(null); setError("排班时间不能进入不可排区间，请选择其他可排时间"); return;
+      if (!dragWarningRef.current) setError("排班时间不能进入不可排区间，请选择其他可排时间");
+      dragWarningRef.current = true;
+      setDragRange({ start: Math.min(current.start, current.end), end: Math.max(current.start, current.end) });
+      return;
     }
+    dragRef.current = null;
+    dragWarningRef.current = false;
+    setDragRange({ start, end: finish });
     setError(""); setSelection({ empId: employee.id, day }); setPresetSearch(""); setDialogMode("catalog");
   }
 
@@ -306,9 +312,9 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
           <div className="schedule-day-person"><strong>{employee.empName}</strong><small>{labelOf(employeeTypes, employee.empTypeCode)} · {labelOf(posts, employee.postCode)}</small></div>
           <div className="schedule-day-body"><div className="schedule-day-availability" aria-label={`${employee.empName} ${day} 可排性`}>
             {availability.map((segment) => <span key={`${segment.start}-${segment.end}`} className={`schedule-day-availability-segment ${segment.statusCode === RosterabilityStatus.UNROSTERABLE ? "unrosterable" : segment.statusCode === RosterabilityStatus.PRIORITY_ROSTERABLE ? "priority" : "rosterable"}`} style={{ left: `${segment.start / 1440 * 100}%`, width: `${(segment.end - segment.start) / 1440 * 100}%` }} title={`${segment.statusCode === RosterabilityStatus.UNROSTERABLE ? "不可排" : segment.statusCode === RosterabilityStatus.PRIORITY_ROSTERABLE ? "优先排" : "可排"} ${timeOfMinute(segment.start)}–${timeOfMinute(segment.end === 1440 ? 0 : segment.end)}`}><b>{(segment.end - segment.start) >= 120 ? (segment.statusCode === RosterabilityStatus.UNROSTERABLE ? "不可排" : segment.statusCode === RosterabilityStatus.PRIORITY_ROSTERABLE ? "优先排" : "可排") : ""}</b></span>)}
-          </div><div className="schedule-day-track" onPointerDown={(event) => dayPointerDown(event, employee)} onPointerMove={dayPointerMove} onPointerUp={(event) => dayPointerUp(event, employee)} onPointerCancel={() => { dragRef.current = null; setDragRange(null); }} aria-label={`${employee.empName} ${day} 排班时间轴`}>
+          </div><div className="schedule-day-track" onPointerDown={(event) => dayPointerDown(event, employee)} onPointerMove={dayPointerMove} onPointerUp={(event) => dayPointerUp(event, employee)} onPointerCancel={() => { dragRef.current = null; dragWarningRef.current = false; setDragRange(null); }} aria-label={`${employee.empName} ${day} 排班时间轴`}>
             {availability.filter((segment) => segment.statusCode === RosterabilityStatus.UNROSTERABLE).map((segment) => <span className="schedule-day-unavailable" key={`blocked-${segment.start}`} style={{ left: `${segment.start / 1440 * 100}%`, width: `${(segment.end - segment.start) / 1440 * 100}%` }} aria-hidden="true" />)}
-            {dragRange && (selection?.empId === employee.id || dragRef.current?.empId === employee.id) && <span className="schedule-day-draft" style={{ left: `${dragRange.start / 1440 * 100}%`, width: `${(dragRange.end - dragRange.start) / 1440 * 100}%` }} />}
+            {dragRange && (selection?.empId === employee.id || dragRef.current?.empId === employee.id) && <span className="schedule-day-draft" style={{ left: `${dragRange.start / 1440 * 100}%`, width: `${(dragRange.end - dragRange.start) / 1440 * 100}%` }}><span>待排 {timeOfMinute(dragRange.start)}–{dragRange.end === 1440 ? "24:00" : timeOfMinute(dragRange.end)} ({durationLabel(dragRange.end - dragRange.start)})</span></span>}
             {dayShifts.map((shift) => { const continued = shift.businessDate !== day; const start = continued ? 0 : minuteOf(shift.startTime); const end = hkDate(shift.endTime) !== day ? 1440 : (minuteOf(shift.endTime) || 1440); return <button type="button" className="schedule-day-shift" key={shift.id} style={{ left: `${start / 1440 * 100}%`, width: `${Math.max(0.6, (end - start) / 1440 * 100)}%` }} onPointerDown={(event) => event.stopPropagation()} onClick={() => edit(shift)} title={`${shift.shiftName} · ${hkTime(shift.startTime)}–${hkDate(shift.endTime) !== shift.businessDate ? "次日 " : ""}${hkTime(shift.endTime)} · ${durationLabel(shift.durationMinutes)}`}><span>{hkTime(shift.startTime)}–{hkTime(shift.endTime)} ({durationLabel(shift.durationMinutes)})</span></button>; })}
           </div></div>
         </div>; })}
