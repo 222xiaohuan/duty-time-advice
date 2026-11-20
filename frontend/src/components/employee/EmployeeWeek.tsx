@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { CheckCircle2, ChevronLeft, ChevronRight, Copy, LockKeyhole, Plus, Save, Trash2, X } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Copy, GripVertical, LockKeyhole, Plus, Save, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiDelete, apiGet, apiPatch, apiPost, type SourceDictionaryItem } from "@/lib/api";
 import { errorText, weekdays } from "@/lib/admin";
@@ -129,6 +129,14 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
     try { await apiDelete(`/rosterability-records/${row.id}`, profile); await loadRecords(); setEditingId(null); setEditorOpen(false); setMessage("时段已删除"); }
     catch (cause) { setError(errorText(cause)); } finally { setBusy(false); }
   }
+  async function resize(row: RecordRow, edge: "start" | "end", minute: number) {
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const change = edge === "start" ? { startTime: timeOfMinute(minute) } : { endTime: minute === 1440 ? "00:00" : timeOfMinute(minute), endDayOffset: minute === 1440 ? 1 : 0 };
+      await apiPatch(`/rosterability-records/${row.id}`, profile, change);
+      await loadRecords(); setMessage("时段已更新");
+    } catch (cause) { setError(errorText(cause)); } finally { setBusy(false); }
+  }
   async function runBatch(path: string, payload: unknown) {
     setBusy(true); setError(""); setMessage(""); setBatchResult(null);
     try {
@@ -155,7 +163,7 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
       return <section className={`employee-day ${selectedDay === day && !batchMode ? "selected" : ""} ${locked ? "locked" : ""}`} key={day}>
         <button type="button" className="employee-day-head" onClick={() => chooseDay(day)} aria-pressed={batchMode ? selectedDates.includes(day) : selectedDay === day}><span><strong>{weekdays[index]}</strong><small>{shortDay(day)}</small></span><span className="day-head-side">{batchMode ? <input type="checkbox" tabIndex={-1} readOnly checked={selectedDates.includes(day)} /> : locked ? "只读" : <Plus size={15} />}</span></button>
         <div className="employee-day-entries">
-          <EmployeeDayTimeline day={day} records={dayRecords} config={config} locked={locked} canDrag={canEdit && !batchMode} onCreate={(start, end) => openDayEditor(day, start, end)} onEdit={edit} />
+          <EmployeeDayTimeline day={day} records={dayRecords} config={config} locked={locked} canDrag={canEdit && !batchMode && !busy} onCreate={(start, end) => openDayEditor(day, start, end)} onEdit={edit} onResize={resize} />
           <div className="employee-entry-list">{dayRecords.map((row) => <button type="button" className={`employee-entry ${statusClass(row.statusCode)}`} key={row.id} onClick={() => edit(row)}><strong>{config?.allowedStatuses.find((status) => status.statusCode === row.statusCode)?.statusName ?? row.statusCode}</strong><span>{hkTime(row.startTime)}–{hkDate(row.endTime) !== day ? "次日 " : ""}{hkTime(row.endTime)}</span></button>)}{dayRecords.length === 0 && <span className="day-empty">无记录</span>}</div>
         </div>
       </section>;
@@ -188,11 +196,16 @@ type EmployeeTimelineProps = {
   canDrag: boolean;
   onCreate: (start: number, end: number) => void;
   onEdit: (row: RecordRow) => void;
+  onResize: (row: RecordRow, edge: "start" | "end", minute: number) => Promise<void>;
 };
 
-function EmployeeDayTimeline({ day, records, config, locked, canDrag, onCreate, onEdit }: EmployeeTimelineProps) {
+type ResizeDrag = { pointerId: number; row: RecordRow; edge: "start" | "end"; start: number; end: number; original: number };
+
+function EmployeeDayTimeline({ day, records, config, locked, canDrag, onCreate, onEdit, onResize }: EmployeeTimelineProps) {
   const dragRef = useRef<{ pointerId: number; start: number; end: number } | null>(null);
+  const resizeRef = useRef<ResizeDrag | null>(null);
   const [drag, setDrag] = useState<{ start: number; end: number } | null>(null);
+  const [resizePreview, setResizePreview] = useState<ResizeDrag | null>(null);
   const hours = [0, 4, 8, 12, 16, 20, 24];
   const baseline = config?.baselineRule === "BASE_ROSTERABLE" ? "rosterable" : config?.baselineRule === "BASE_UNROSTERABLE" ? "unrosterable" : "none";
   const baselineText = !config ? "暂无可排性参数" : locked ? (day < hkToday() ? "无法修改过去日期的可排时间" : "已提前锁定可排时间") : baselineLabel(config.baselineRule);
@@ -207,10 +220,25 @@ function EmployeeDayTimeline({ day, records, config, locked, canDrag, onCreate, 
     const rect = event.currentTarget.getBoundingClientRect();
     return Math.max(0, Math.min(1440, Math.round((event.clientX - rect.left) / rect.width * 96) * 15));
   };
-  const overlaps = (start: number, end: number) => records.some((row) => {
+  const overlaps = (start: number, end: number, excludeId?: number) => records.some((row) => {
+    if (row.id === excludeId) return false;
     const range = rangeFor(row);
     return start < range.end && end > range.start;
   });
+  function resizeDown(event: PointerEvent<HTMLButtonElement>, row: RecordRow, edge: "start" | "end") {
+    event.stopPropagation();
+    if (!canDrag || locked || row.locked || event.button !== 0) return;
+    const range = rangeFor(row);
+    const next = { pointerId: event.pointerId, row, edge, ...range, original: range[edge] };
+    resizeRef.current = next; setResizePreview(next);
+    event.currentTarget.setPointerCapture(event.pointerId); event.preventDefault();
+  }
+  function nextResize(current: ResizeDrag, minute: number): ResizeDrag {
+    const next = current.edge === "start"
+      ? { ...current, start: Math.max(0, Math.min(current.end - 15, minute)) }
+      : { ...current, end: Math.min(1440, Math.max(current.start + 15, minute)) };
+    return overlaps(next.start, next.end, current.row.id) ? current : next;
+  }
   function pointerDown(event: PointerEvent<HTMLDivElement>) {
     if (!canDrag || locked || event.button !== 0) return;
     const start = Math.min(1425, minuteAt(event));
@@ -219,6 +247,12 @@ function EmployeeDayTimeline({ day, records, config, locked, canDrag, onCreate, 
     dragRef.current = next; setDrag(next); event.currentTarget.setPointerCapture(event.pointerId); event.preventDefault();
   }
   function pointerMove(event: PointerEvent<HTMLDivElement>) {
+    const resizing = resizeRef.current;
+    if (resizing?.pointerId === event.pointerId) {
+      const next = nextResize(resizing, minuteAt(event));
+      resizeRef.current = next; setResizePreview(next);
+      return;
+    }
     const current = dragRef.current;
     if (!current || current.pointerId !== event.pointerId) return;
     const pointer = minuteAt(event);
@@ -226,6 +260,14 @@ function EmployeeDayTimeline({ day, records, config, locked, canDrag, onCreate, 
     setDrag(next);
   }
   function pointerUp(event: PointerEvent<HTMLDivElement>) {
+    const resizing = resizeRef.current;
+    if (resizing?.pointerId === event.pointerId) {
+      const next = nextResize(resizing, minuteAt(event));
+      resizeRef.current = null;
+      if (next[next.edge] !== next.original) void onResize(next.row, next.edge, next[next.edge]).finally(() => setResizePreview(null));
+      else setResizePreview(null);
+      return;
+    }
     const current = dragRef.current;
     if (!current || current.pointerId !== event.pointerId) return;
     const pointer = minuteAt(event);
@@ -238,13 +280,24 @@ function EmployeeDayTimeline({ day, records, config, locked, canDrag, onCreate, 
   }
   return <div className={`employee-day-timeline ${locked ? "locked" : ""}`}>
     <div className="employee-timeline-ruler" aria-hidden="true">{hours.map((hour) => <span key={hour} style={{ left: `${hour / 24 * 100}%` }}>{String(hour).padStart(2, "0")}</span>)}</div>
-    <div className={`employee-timeline-track baseline-${baseline} ${locked ? "locked" : ""}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={() => { dragRef.current = null; setDrag(null); }} aria-label={`${day} 可排性时间轴`}>
+    <div className={`employee-timeline-track baseline-${baseline} ${locked ? "locked" : ""}`} onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={pointerUp} onPointerCancel={() => { dragRef.current = null; resizeRef.current = null; setDrag(null); setResizePreview(null); }} aria-label={`${day} 可排性时间轴`}>
       <span className="employee-timeline-baseline">{locked && <LockKeyhole size={12} strokeWidth={2.2} />}{baselineText}</span>
       {records.map((row) => {
-        const range = rangeFor(row);
+        const preview = resizePreview?.row.id === row.id ? resizePreview : null;
+        const range = preview ?? rangeFor(row);
         const overnight = hkDate(row.endTime) !== row.businessDate;
-        const label = `${labelStatus(row.statusCode)} ${hkTime(row.startTime)}–${overnight ? "次日 " : ""}${hkTime(row.endTime)} · ${durationLabel(row.startTime, row.endTime)}`;
-        return <button type="button" className={`employee-timeline-record ${statusClass(row.statusCode)}`} key={row.id} style={{ left: `${range.start / 1440 * 100}%`, width: `${Math.max(1.4, (range.end - range.start) / 1440 * 100)}%`, backgroundColor: config?.allowedStatuses.find((status) => status.statusCode === row.statusCode)?.colorHex ?? statusColor(row.statusCode) }} title={label} aria-label={`${day} ${label}`} onPointerDown={(event) => event.stopPropagation()} onClick={() => onEdit(row)}><span>{label}</span></button>;
+        const previewEnd = preview?.edge === "start" ? `${overnight ? "次日 " : ""}${hkTime(row.endTime)}` : range.end === 1440 ? "次日 00:00" : timeOfMinute(range.end);
+        const previewMinutes = preview?.edge === "start"
+          ? (new Date(row.endTime).getTime() - new Date(row.startTime).getTime()) / 60000 + minuteOfIso(row.startTime) - range.start
+          : range.end - range.start;
+        const label = preview
+          ? `${labelStatus(row.statusCode)} ${timeOfMinute(range.start)}–${previewEnd} · ${Number((previewMinutes / 60).toFixed(1))}h`
+          : `${labelStatus(row.statusCode)} ${hkTime(row.startTime)}–${overnight ? "次日 " : ""}${hkTime(row.endTime)} · ${durationLabel(row.startTime, row.endTime)}`;
+        const editable = canDrag && !locked && !row.locked && row.sourceCode !== "EXTERNAL_SYNC" && row.sourceCode !== "BULK_IMPORT";
+        return <div className={`employee-timeline-record ${statusClass(row.statusCode)} ${editable ? "resizable" : ""}`} key={row.id} style={{ left: `${range.start / 1440 * 100}%`, width: `${Math.max(1.4, (range.end - range.start) / 1440 * 100)}%`, backgroundColor: config?.allowedStatuses.find((status) => status.statusCode === row.statusCode)?.colorHex ?? statusColor(row.statusCode) }} onPointerDown={(event) => event.stopPropagation()}>
+          <button type="button" className="employee-timeline-record-main" title={label} aria-label={`${day} ${label}`} onClick={() => onEdit(row)}><span>{label}</span></button>
+          {editable && <><button type="button" className="employee-timeline-resize start" title="拖动调整开始时间" aria-label={`${day} ${labelStatus(row.statusCode)} 拖动调整开始时间`} onPointerDown={(event) => resizeDown(event, row, "start")}><GripVertical size={12} /></button><button type="button" className="employee-timeline-resize end" title="拖动调整结束时间" aria-label={`${day} ${labelStatus(row.statusCode)} 拖动调整结束时间`} onPointerDown={(event) => resizeDown(event, row, "end")}><GripVertical size={12} /></button></>}
+        </div>;
       })}
       {drag && <span className="employee-timeline-draft" style={{ left: `${Math.min(drag.start, drag.end) / 1440 * 100}%`, width: `${Math.max(1.4, (Math.max(drag.start, drag.end) - Math.min(drag.start, drag.end)) / 1440 * 100)}%` }}><span>待维护 {timeOfMinute(Math.min(drag.start, drag.end))}–{timeOfMinute(Math.max(drag.start, drag.end))}</span></span>}
     </div>
