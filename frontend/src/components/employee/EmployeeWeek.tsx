@@ -41,10 +41,8 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
   const [config, setConfig] = useState<Config | null>(null);
   const [records, setRecords] = useState<RecordRow[]>([]);
   const [selectedDay, setSelectedDay] = useState(() => hkToday());
-  const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [copyDates, setCopyDates] = useState<string[]>([]);
   const [repeatWeeks, setRepeatWeeks] = useState(0);
-  const [batchMode, setBatchMode] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<Form>(() => initialForm(hkToday(), "ROSTERABLE"));
@@ -88,18 +86,10 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
     const end = Math.max(start + 15, Math.min(1440, endMinute));
     setSelectedDay(day); setEditingId(null); setCopyDates([]); setRepeatWeeks(0);
     setForm({ ...initialForm(day, config?.allowedStatuses[0]?.statusCode ?? ""), startTime: timeOfMinute(start), endTime: end === 1440 ? "00:00" : timeOfMinute(end), endDayOffset: end === 1440 ? 1 : 0 });
-    setError(""); setEditorOpen(true);
-  }
-  function chooseDay(day: string) {
-    if (batchMode) {
-      setSelectedDates((current) => current.includes(day) ? current.filter((item) => item !== day) : [...current, day].sort());
-      setEditorOpen(true);
-      return;
-    }
-    openDayEditor(day);
+    setError(""); setBatchResult(null); setEditorOpen(true);
   }
   function edit(row: RecordRow) {
-    setBatchMode(false); setEditingId(row.id); setSelectedDay(row.businessDate); setCopyDates([]); setRepeatWeeks(0);
+    setEditingId(row.id); setSelectedDay(row.businessDate); setCopyDates([]); setRepeatWeeks(0);
     setForm({ businessDate: row.businessDate, statusCode: row.statusCode, allDay: hkTime(row.startTime) === "00:00" && hkTime(row.endTime) === "00:00" && hkDate(row.endTime) !== row.businessDate, startTime: hkTime(row.startTime), endTime: hkTime(row.endTime), endDayOffset: hkDate(row.endTime) === row.businessDate ? 0 : 1, remark: row.remark ?? "" });
     setError(""); setEditorOpen(true);
   }
@@ -141,41 +131,38 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
     setBusy(true); setError(""); setMessage(""); setBatchResult(null);
     try {
       const result = await apiPost<BatchResponse>(path, profile, payload);
-      setBatchResult(result); await loadRecords(); setSelectedDates([]); setCopyDates([]); setRepeatWeeks(0); setEditingId(null); setBatchMode(false); setEditorOpen(false);
+      setBatchResult(result); await loadRecords(); setCopyDates([]); setRepeatWeeks(0); setEditingId(null); setEditorOpen(false);
       setMessage(`新增 ${result.created} 条，失败 ${result.failed} 条`);
     } catch (cause) { setError(errorText(cause)); } finally { setBusy(false); }
   }
   function moveWeek(shift: number) {
-    setMonday((current) => addDays(current, shift * 7)); setSelectedDates([]); setCopyDates([]); setRepeatWeeks(0); setEditingId(null); setBatchResult(null); setEditorOpen(false);
+    setMonday((current) => addDays(current, shift * 7)); setCopyDates([]); setRepeatWeeks(0); setEditingId(null); setBatchResult(null); setEditorOpen(false);
     const nextDay = addDays(monday, shift * 7); setSelectedDay(nextDay); setForm(initialForm(nextDay, config?.allowedStatuses[0]?.statusCode ?? ""));
   }
 
   return <div className="employee-page">
     <div className="employee-toolbar">
-      <div className="week-nav"><Button size="icon" variant="outline" title="上一周" aria-label="上一周" onClick={() => moveWeek(-1)}><ChevronLeft size={17} /></Button><strong>{shortDay(monday)} – {shortDay(addDays(monday, 6))}</strong><Button size="icon" variant="outline" title="下一周" aria-label="下一周" onClick={() => moveWeek(1)}><ChevronRight size={17} /></Button><Button size="sm" variant="ghost" onClick={() => { const today = hkToday(); const current = mondayOf(today); setMonday(current); setSelectedDay(today); setEditingId(null); setSelectedDates([]); setEditorOpen(false); setForm(initialForm(today, config?.allowedStatuses[0]?.statusCode ?? "")); }}>本周</Button></div>
+      <div className="week-nav"><Button size="icon" variant="outline" title="上一周" aria-label="上一周" onClick={() => moveWeek(-1)}><ChevronLeft size={17} /></Button><strong>{shortDay(monday)} – {shortDay(addDays(monday, 6))}</strong><Button size="icon" variant="outline" title="下一周" aria-label="下一周" onClick={() => moveWeek(1)}><ChevronRight size={17} /></Button><Button size="sm" variant="ghost" onClick={() => { const today = hkToday(); const current = mondayOf(today); setMonday(current); setSelectedDay(today); setEditingId(null); setEditorOpen(false); setForm(initialForm(today, config?.allowedStatuses[0]?.statusCode ?? "")); }}>本周</Button></div>
     </div>
     {config && <div className="employee-context"><strong>{config.empName}</strong><span>{baselineLabel(config.baselineRule)}</span><span>提前 {config.cutoffDays} 天锁定</span>{!config.empEditEnable && <span>员工编辑已关闭</span>}{config.submitMode === "MODE_NO_SUBMIT" && <span>无需提报</span>}</div>}
     {config && <div className="employee-status-legend" aria-label="可排性状态说明"><span>可维护状态</span>{config.allowedStatuses.length ? config.allowedStatuses.map((status) => <span className={`employee-status-legend-item ${statusClass(status.statusCode)}`} key={status.statusCode}><i style={{ backgroundColor: status.colorHex ?? statusColor(status.statusCode) }} />{status.statusName}</span>) : <span>无</span>}</div>}
-    <details className="employee-quick-actions"><summary><Copy size={15} />快捷操作</summary><div className="employee-batch-toolbar"><Button size="sm" variant="outline" disabled={busy || !canEdit} onClick={() => void runBatch("/rosterability-records/batch/copy-previous-week", {})}>复制上周至本周</Button><Button size="sm" variant="outline" disabled={busy || !canEdit} onClick={() => void runBatch("/rosterability-records/batch/copy-current-to-next", {})}>复制本周至下周</Button><Button size="sm" variant={batchMode ? "default" : "outline"} disabled={!canEdit} onClick={() => { const next = !batchMode; setBatchMode(next); setEditingId(null); setSelectedDates([]); setBatchResult(null); setEditorOpen(next); }}>多日期统一设置</Button></div></details>
+    <details className="employee-quick-actions"><summary><Copy size={15} />快捷操作</summary><div className="employee-batch-toolbar"><Button size="sm" variant="outline" disabled={busy || !canEdit} onClick={() => void runBatch("/rosterability-records/batch/copy-previous-week", {})}>复制上周至本周</Button><Button size="sm" variant="outline" disabled={busy || !canEdit} onClick={() => void runBatch("/rosterability-records/batch/copy-current-to-next", {})}>复制本周至下周</Button></div></details>
     {loading ? <div className="employee-loading">正在加载周记录</div> : <div className="employee-week" role="group" aria-label="周日历">{dates.map((day, index) => {
       const locked = config ? dayLocked(day, config.cutoffDays) : true;
       const dayRecords = records.filter((row) => row.businessDate === day);
-      return <section className={`employee-day ${selectedDay === day && !batchMode ? "selected" : ""} ${locked ? "locked" : ""}`} key={day}>
-        <button type="button" className="employee-day-head" onClick={() => chooseDay(day)} aria-pressed={batchMode ? selectedDates.includes(day) : selectedDay === day}><span><strong>{weekdays[index]}</strong><small>{shortDay(day)}</small></span><span className="day-head-side">{batchMode ? <input type="checkbox" tabIndex={-1} readOnly checked={selectedDates.includes(day)} /> : locked ? "只读" : <Plus size={15} />}</span></button>
+      return <section className={`employee-day ${selectedDay === day ? "selected" : ""} ${locked ? "locked" : ""}`} key={day}>
+        <button type="button" className="employee-day-head" onClick={() => openDayEditor(day)} aria-pressed={selectedDay === day}><span><strong>{weekdays[index]}</strong><small>{shortDay(day)}</small></span><span className="day-head-side">{locked ? "只读" : <Plus size={15} />}</span></button>
         <div className="employee-day-entries">
-          <EmployeeDayTimeline day={day} records={dayRecords} config={config} locked={locked} canDrag={canEdit && !batchMode && !busy} onCreate={(start, end) => openDayEditor(day, start, end)} onEdit={edit} onResize={resize} />
+          <EmployeeDayTimeline day={day} records={dayRecords} config={config} locked={locked} canDrag={canEdit && !busy} onCreate={(start, end) => openDayEditor(day, start, end)} onEdit={edit} onResize={resize} />
           <div className="employee-entry-list">{dayRecords.map((row) => <button type="button" className={`employee-entry ${statusClass(row.statusCode)}`} key={row.id} onClick={() => edit(row)}><strong>{config?.allowedStatuses.find((status) => status.statusCode === row.statusCode)?.statusName ?? row.statusCode}</strong><span>{hkTime(row.startTime)}–{hkDate(row.endTime) !== day ? "次日 " : ""}{hkTime(row.endTime)}</span></button>)}{dayRecords.length === 0 && <span className="day-empty">无记录</span>}</div>
         </div>
       </section>;
     })}</div>}
     <div className={`employee-lower ${editorOpen ? "employee-editor-open" : ""}`}>
       <section className="employee-editor">
-        <div className="admin-intro"><div><h2>{batchMode ? "多日期统一设置" : editingId ? "编辑时段" : "新增时段"}</h2><span>{batchMode ? `${selectedDates.length} 个日期` : selectedDay}</span></div><Button type="button" variant="ghost" size="icon" className="employee-editor-close" title="关闭维护面板" aria-label="关闭维护面板" onClick={() => setEditorOpen(false)}><X size={17} /></Button></div>
+        <div className="admin-intro"><div><h2>{editingId ? "编辑时段" : "新增时段"}</h2><span>{selectedDay}</span></div><Button type="button" variant="ghost" size="icon" className="employee-editor-close" title="关闭维护面板" aria-label="关闭维护面板" onClick={() => setEditorOpen(false)}><X size={17} /></Button></div>
         {config && <div className="employee-status-guide"><span>默认：{baselineLabel(config.baselineRule)}</span><span>可维护：{config.allowedStatuses.length ? config.allowedStatuses.map((status) => status.statusName).join("、") : "无"}</span></div>}
-        {batchMode ? <form onSubmit={(event) => { event.preventDefault(); if (selectedDates.length && !baselineMessage) { const entered = submittedForm(event.currentTarget, form); void runBatch("/rosterability-records/batch/set-dates", { dates: selectedDates, statusCode: entered.statusCode, startTime: entered.allDay ? "00:00" : entered.startTime, endTime: entered.allDay ? "00:00" : entered.endTime, endDayOffset: entered.allDay ? 1 : entered.endDayOffset, remark: entered.remark || null }); } else if (baselineMessage) setError(baselineMessage); }} className="employee-form">
-          <RecordFields form={form} setForm={setForm} statuses={config?.allowedStatuses ?? []} disabled={!canEdit || busy} />
-          {baselineMessage && <p className="form-error" role="alert">{baselineMessage}</p>}<div className="admin-actions"><Button type="submit" disabled={!canEdit || !formStatusAllowed || Boolean(baselineMessage) || busy || selectedDates.length === 0}><Save size={16} />应用到所选日期</Button></div>
-        </form> : selectedLocked || !canEdit ? <div className="employee-readonly">{selectedLocked ? "该业务日期已到报备截止时间，记录只读" : "当前参数不允许员工提报"}</div> : <form onSubmit={save} className="employee-form">
+        {selectedLocked || !canEdit ? <div className="employee-readonly">{selectedLocked ? "该业务日期已到报备截止时间，记录只读" : "当前参数不允许员工提报"}</div> : <form onSubmit={save} className="employee-form">
           <RecordFields form={form} setForm={setForm} statuses={config?.allowedStatuses ?? []} disabled={busy} repeat={editingId === null ? { dates, selectedDay, copyDates, setCopyDates, repeatWeeks, setRepeatWeeks } : undefined} />
           {!formStatusAllowed && <p className="form-error">当前状态已不允许员工提报，请选择其他状态。</p>}{baselineMessage && <p className="form-error" role="alert">{baselineMessage}</p>}
           <div className="admin-actions"><Button type="submit" disabled={busy || !formStatusAllowed || Boolean(baselineMessage)}><Save size={16} />{editingId ? "保存修改" : "新增时段"}</Button>{editingId && <Button type="button" variant="outline" onClick={() => { setEditingId(null); setForm(initialForm(selectedDay, config?.allowedStatuses[0]?.statusCode ?? "")); }}>取消</Button>}{editingId && <Button type="button" variant="outline" disabled={busy} onClick={() => { const row = records.find((record) => record.id === editingId); if (row) void remove(row); }}><Trash2 size={15} />删除</Button>}</div>
