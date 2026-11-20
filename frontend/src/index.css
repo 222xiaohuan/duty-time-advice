@@ -96,8 +96,9 @@ button { cursor: pointer; }
 .admin-picker, .admin-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px 20px; }
 .admin-picker { max-width: 720px; }
 .admin-picker label, .admin-form-grid label { display: flex; flex-direction: column; gap: 7px; min-width: 0; color: #485969; font-size: 12px; font-weight: 600; }
-.admin-picker select, .admin-form-grid select, .admin-form-grid input { width: 100%; min-width: 0; height: 37px; padding: 0 10px; border: 1px solid #ccd7df; border-radius: 4px; background: #fff; color: #18242f; font: inherit; font-size: 13px; }
-.admin-picker select:focus, .admin-form-grid select:focus, .admin-form-grid input:focus { outline: 2px solid #82adcf; outline-offset: 1px; }
+.admin-picker select, .admin-form-grid select, .admin-form-grid input, .admin-form-grid textarea { width: 100%; min-width: 0; height: 37px; padding: 0 10px; border: 1px solid #ccd7df; border-radius: 4px; background: #fff; color: #18242f; font: inherit; font-size: 13px; }
+.admin-form-grid textarea { height: auto; min-height: 74px; padding-top: 9px; resize: vertical; }
+.admin-picker select:focus, .admin-form-grid select:focus, .admin-form-grid input:focus, .admin-form-grid textarea:focus { outline: 2px solid #82adcf; outline-offset: 1px; }
 .admin-form { display: flex; flex-direction: column; gap: 20px; padding: 22px; border: 1px solid var(--border); border-radius: 4px; background: #fff; }
 .admin-form-title { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .admin-form-title h3, .admin-inline-form h4 { margin: 0; font-size: 14px; }
@@ -164,6 +165,8 @@ button { cursor: pointer; }
 .form-error { position: fixed; top: 76px; left: 50%; z-index: 1000; width: min(620px, calc(100vw - 32px)); margin: 0; padding: 12px 16px; transform: translateX(-50%); border: 2px solid #f04444; border-radius: 8px; background: #fff0f0; color: #b4232c; box-shadow: 0 10px 28px #7f1d1d26; animation: error-toast 5s ease-out forwards; }
 @keyframes error-toast { 0%, 86% { opacity: 1; visibility: visible; } 100% { opacity: 0; visibility: hidden; } }
 .form-success { background: #ecf7ef; color: #216a3f; }
+.employee-success-toast { position: fixed; top: 76px; left: 50%; z-index: 1000; display: flex; align-items: center; gap: 9px; width: min(620px, calc(100vw - 32px)); margin: 0; padding: 12px 16px; transform: translateX(-50%); border: 1px solid #a9d6b4; border-radius: 8px; background: #ecf7ef; box-shadow: 0 10px 28px #1f6b3d26; font-size: 13px; animation: success-toast 4s ease-out forwards; }
+@keyframes success-toast { 0%, 84% { opacity: 1; visibility: visible; } 100% { opacity: 0; visibility: hidden; } }
 .template-page { max-width: 1440px; }
 .template-toolbar { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; }
 .template-toolbar h2 { margin: 0; font-size: 20px; }
@@ -261,6 +264,17 @@ button { cursor: pointer; }
 .employee-quick-actions summary::marker { color: #7b8d9a; }
 .employee-status-guide { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 9px 10px; border: 1px solid #dbe5eb; border-radius: 4px; background: #f4f8fa; color: #526171; font-size: 11px; line-height: 1.5; }
 .employee-status-guide span + span { color: #0c547e; }
+.employee-time-mode { display: flex; flex-direction: column; gap: 7px; min-width: 0; color: #485969; font-size: 12px; font-weight: 600; }
+.employee-time-mode > div { display: flex; align-items: center; gap: 18px; }
+.employee-time-mode label { display: inline-flex; flex-direction: row; align-items: center; gap: 6px; color: #485969; font-size: 12px; font-weight: 500; }
+.employee-record-fields .employee-time-mode input[type="radio"] { width: 16px; min-width: 16px; height: 16px; padding: 0; accent-color: #0c336a; }
+.employee-repeat-picker { min-width: 0; }
+.employee-repeat-picker summary { display: flex; align-items: center; justify-content: space-between; min-height: 37px; padding: 0 10px; border: 1px solid #ccd7df; border-radius: 4px; color: #485969; cursor: pointer; font-size: 12px; list-style: none; }
+.employee-repeat-picker summary::-webkit-details-marker { display: none; }
+.employee-repeat-picker summary span + span { color: #8a959e; }
+.employee-repeat-options { display: flex; flex-wrap: wrap; gap: 8px 14px; padding: 10px; border: 1px solid #ccd7df; border-top: 0; background: #f8fafb; }
+.employee-repeat-options label { display: inline-flex; flex-direction: row; align-items: center; gap: 5px; color: #526171; font-size: 11px; font-weight: 500; }
+.employee-record-fields .employee-repeat-options input[type="checkbox"] { width: 15px; min-width: 15px; height: 15px; padding: 0; }
 .employee-editor-close { display: none; }
 .employee-batch-toolbar { padding-bottom: 3px; }
 .employee-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 7px; }
@@ -661,6 +675,20 @@ button { cursor: pointer; }
   .employee-lower.employee-editor-open .employee-detail { display: none; }
   .employee-lower.employee-editor-open .employee-editor { min-height: 0; padding: 15px; border: 0; border-radius: 0; }
   .employee-lower.employee-editor-open .employee-editor-close { display: grid; }
+  .employee-form { align-items: stretch; gap: 10px; }
+  .employee-form .employee-record-fields { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .employee-record-fields > label, .employee-record-fields > .employee-time-mode, .employee-record-fields > .employee-repeat-picker { display: grid; grid-template-columns: 82px minmax(0, 1fr); align-items: center; gap: 8px; min-height: 50px; padding: 7px 0; border-bottom: 1px solid #e5ebef; }
+  .employee-record-fields > label { flex-direction: row; }
+  .employee-record-fields > label > input, .employee-record-fields > label > select { height: 36px; }
+  .employee-record-fields > .employee-time-mode > div { gap: 14px; }
+  .employee-record-fields > .employee-repeat-picker { display: block; }
+  .employee-repeat-picker summary { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 8px; padding: 0; border: 0; }
+  .employee-repeat-picker summary span + span { justify-self: end; }
+  .employee-repeat-options { margin: 7px 0 0 90px; padding: 7px; border: 1px solid #ccd7df; border-radius: 4px; }
+  .employee-record-fields > .employee-remark { align-items: start; }
+  .employee-record-fields > .employee-remark textarea { min-height: 58px; }
+  .employee-form > .admin-actions { position: sticky; bottom: -15px; z-index: 1; margin-top: 2px; padding: 10px 0 15px; background: #fff; }
+  .employee-form > .admin-actions > button:first-child { flex: 1; }
   .employee-toolbar { align-items: flex-start; }
   .manager-day-row { grid-template-columns: minmax(0, 1fr); gap: 5px; }
   .manager-detail-grid { grid-template-columns: minmax(0, 1fr); }

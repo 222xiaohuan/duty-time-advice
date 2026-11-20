@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent } from "react";
-import { ChevronLeft, ChevronRight, Copy, LockKeyhole, Plus, Save, Trash2, X } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Copy, LockKeyhole, Plus, Save, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiDelete, apiGet, apiPatch, apiPost, type SourceDictionaryItem } from "@/lib/api";
 import { errorText, weekdays } from "@/lib/admin";
@@ -11,10 +11,10 @@ import { addDays, dayLocked, hkDate, hkTime, hkToday, mondayOf, shortDay } from 
 type AllowedStatus = { statusCode: string; statusName: string; colorHex: string | null };
 type Config = { empId: number; empName: string; cutoffDays: number; baselineRule: string; submitMode: string; empEditEnable: number; priorityRosterEnable: number; allowedStatuses: AllowedStatus[] };
 type RecordRow = { id: number; businessDate: string; statusCode: string; sourceCode: string; startTime: string; endTime: string; remark: string | null; locked: number };
-type Form = { businessDate: string; statusCode: string; startTime: string; endTime: string; endDayOffset: number; remark: string };
+type Form = { businessDate: string; statusCode: string; allDay: boolean; startTime: string; endTime: string; endDayOffset: number; remark: string };
 type BatchResult = { businessDate: string; sourceId?: number | null; success: boolean; recordId?: number; message?: string };
 type BatchResponse = { created: number; failed: number; results: BatchResult[] };
-const initialForm = (date: string, statusCode: string): Form => ({ businessDate: date, statusCode, startTime: "09:00", endTime: "17:00", endDayOffset: 0, remark: "" });
+const initialForm = (date: string, statusCode: string): Form => ({ businessDate: date, statusCode, allDay: false, startTime: "09:00", endTime: "17:00", endDayOffset: 0, remark: "" });
 const statusClass = (code: string) => code === RosterabilityStatus.ROSTERABLE ? "rosterable" : code === RosterabilityStatus.PRIORITY_ROSTERABLE ? "priority" : "unrosterable";
 const baselineLabel = (rule?: string | null) => rule === "BASE_UNROSTERABLE" ? "默认全部不可排" : rule === "BASE_ROSTERABLE" ? "默认全部可排" : "默认可排性未配置";
 const statusColor = (code: string) => code === RosterabilityStatus.ROSTERABLE ? "#4a90e2" : code === RosterabilityStatus.PRIORITY_ROSTERABLE ? "#2e8b57" : "#a9a9a9";
@@ -28,6 +28,7 @@ function submittedForm(element: HTMLFormElement, current: Form): Form {
   const values = new FormData(element);
   return { ...current,
     statusCode: String(values.get("statusCode") ?? current.statusCode),
+    allDay: values.get("timeMode") === "allDay",
     startTime: String(values.get("startTime") ?? current.startTime),
     endTime: String(values.get("endTime") ?? current.endTime),
     endDayOffset: Number(values.get("endDayOffset") ?? current.endDayOffset),
@@ -41,6 +42,8 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
   const [records, setRecords] = useState<RecordRow[]>([]);
   const [selectedDay, setSelectedDay] = useState(() => hkToday());
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
+  const [copyDates, setCopyDates] = useState<string[]>([]);
+  const [repeatWeeks, setRepeatWeeks] = useState(0);
   const [batchMode, setBatchMode] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -83,7 +86,7 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
   function openDayEditor(day: string, startMinute = 540, endMinute = 1020) {
     const start = Math.max(0, Math.min(1425, startMinute));
     const end = Math.max(start + 15, Math.min(1440, endMinute));
-    setSelectedDay(day); setEditingId(null);
+    setSelectedDay(day); setEditingId(null); setCopyDates([]); setRepeatWeeks(0);
     setForm({ ...initialForm(day, config?.allowedStatuses[0]?.statusCode ?? ""), startTime: timeOfMinute(start), endTime: end === 1440 ? "00:00" : timeOfMinute(end), endDayOffset: end === 1440 ? 1 : 0 });
     setError(""); setEditorOpen(true);
   }
@@ -96,8 +99,8 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
     openDayEditor(day);
   }
   function edit(row: RecordRow) {
-    setBatchMode(false); setEditingId(row.id); setSelectedDay(row.businessDate);
-    setForm({ businessDate: row.businessDate, statusCode: row.statusCode, startTime: hkTime(row.startTime), endTime: hkTime(row.endTime), endDayOffset: hkDate(row.endTime) === row.businessDate ? 0 : 1, remark: row.remark ?? "" });
+    setBatchMode(false); setEditingId(row.id); setSelectedDay(row.businessDate); setCopyDates([]); setRepeatWeeks(0);
+    setForm({ businessDate: row.businessDate, statusCode: row.statusCode, allDay: hkTime(row.startTime) === "00:00" && hkTime(row.endTime) === "00:00" && hkDate(row.endTime) !== row.businessDate, startTime: hkTime(row.startTime), endTime: hkTime(row.endTime), endDayOffset: hkDate(row.endTime) === row.businessDate ? 0 : 1, remark: row.remark ?? "" });
     setError(""); setEditorOpen(true);
   }
   async function save(event: React.FormEvent) {
@@ -105,10 +108,19 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
     setBusy(true); setError(""); setMessage(""); setBatchResult(null);
     try {
       const entered = submittedForm(event.currentTarget as HTMLFormElement, form);
-      const payload = { ...entered, remark: entered.remark || null };
-      if (editingId === null) await apiPost("/rosterability-records", profile, payload);
-      else await apiPatch(`/rosterability-records/${editingId}`, profile, payload);
-      await loadRecords(); setEditingId(null); setEditorOpen(false); setMessage("时段已保存");
+      const payload = { ...entered, startTime: entered.allDay ? "00:00" : entered.startTime, endTime: entered.allDay ? "00:00" : entered.endTime, endDayOffset: entered.allDay ? 1 : entered.endDayOffset, remark: entered.remark || null };
+      const baseDates = [selectedDay, ...copyDates];
+      const repeatedDates = Array.from({ length: repeatWeeks }, (_, index) => baseDates.map((day) => addDays(day, (index + 1) * 7))).flat();
+      const targetDates = editingId === null && (copyDates.length > 0 || repeatWeeks > 0) ? [...new Set([...baseDates, ...repeatedDates])].sort() : [];
+      if (targetDates.length > 0) {
+        const result = await apiPost<BatchResponse>("/rosterability-records/batch/set-dates", profile, { dates: targetDates, statusCode: payload.statusCode, startTime: payload.startTime, endTime: payload.endTime, endDayOffset: payload.endDayOffset, remark: payload.remark });
+        setBatchResult(result); await loadRecords(); setMessage(`已处理 ${result.created} 条，失败 ${result.failed} 条`);
+      } else {
+        if (editingId === null) await apiPost("/rosterability-records", profile, payload);
+        else await apiPatch(`/rosterability-records/${editingId}`, profile, payload);
+        await loadRecords(); setMessage("时段已保存");
+      }
+      setEditingId(null); setCopyDates([]); setRepeatWeeks(0); setEditorOpen(false);
     } catch (cause) { setError(errorText(cause)); } finally { setBusy(false); }
   }
   async function remove(row: RecordRow) {
@@ -121,12 +133,12 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
     setBusy(true); setError(""); setMessage(""); setBatchResult(null);
     try {
       const result = await apiPost<BatchResponse>(path, profile, payload);
-      setBatchResult(result); await loadRecords(); setSelectedDates([]); setEditingId(null); setBatchMode(false); setEditorOpen(false);
+      setBatchResult(result); await loadRecords(); setSelectedDates([]); setCopyDates([]); setRepeatWeeks(0); setEditingId(null); setBatchMode(false); setEditorOpen(false);
       setMessage(`新增 ${result.created} 条，失败 ${result.failed} 条`);
     } catch (cause) { setError(errorText(cause)); } finally { setBusy(false); }
   }
   function moveWeek(shift: number) {
-    setMonday((current) => addDays(current, shift * 7)); setSelectedDates([]); setEditingId(null); setBatchResult(null); setEditorOpen(false);
+    setMonday((current) => addDays(current, shift * 7)); setSelectedDates([]); setCopyDates([]); setRepeatWeeks(0); setEditingId(null); setBatchResult(null); setEditorOpen(false);
     const nextDay = addDays(monday, shift * 7); setSelectedDay(nextDay); setForm(initialForm(nextDay, config?.allowedStatuses[0]?.statusCode ?? ""));
   }
 
@@ -152,18 +164,18 @@ export function EmployeeWeek({ profile, sources }: { profile: MockProfile; sourc
       <section className="employee-editor">
         <div className="admin-intro"><div><h2>{batchMode ? "多日期统一设置" : editingId ? "编辑时段" : "新增时段"}</h2><span>{batchMode ? `${selectedDates.length} 个日期` : selectedDay}</span></div><Button type="button" variant="ghost" size="icon" className="employee-editor-close" title="关闭维护面板" aria-label="关闭维护面板" onClick={() => setEditorOpen(false)}><X size={17} /></Button></div>
         {config && <div className="employee-status-guide"><span>默认：{baselineLabel(config.baselineRule)}</span><span>可维护：{config.allowedStatuses.length ? config.allowedStatuses.map((status) => status.statusName).join("、") : "无"}</span></div>}
-        {batchMode ? <form onSubmit={(event) => { event.preventDefault(); if (selectedDates.length && !baselineMessage) { const entered = submittedForm(event.currentTarget, form); void runBatch("/rosterability-records/batch/set-dates", { dates: selectedDates, statusCode: entered.statusCode, startTime: entered.startTime, endTime: entered.endTime, endDayOffset: entered.endDayOffset, remark: entered.remark || null }); } else if (baselineMessage) setError(baselineMessage); }} className="employee-form">
+        {batchMode ? <form onSubmit={(event) => { event.preventDefault(); if (selectedDates.length && !baselineMessage) { const entered = submittedForm(event.currentTarget, form); void runBatch("/rosterability-records/batch/set-dates", { dates: selectedDates, statusCode: entered.statusCode, startTime: entered.allDay ? "00:00" : entered.startTime, endTime: entered.allDay ? "00:00" : entered.endTime, endDayOffset: entered.allDay ? 1 : entered.endDayOffset, remark: entered.remark || null }); } else if (baselineMessage) setError(baselineMessage); }} className="employee-form">
           <RecordFields form={form} setForm={setForm} statuses={config?.allowedStatuses ?? []} disabled={!canEdit || busy} />
-          {baselineMessage && <p className="form-error" role="alert">{baselineMessage}</p>}<Button type="submit" disabled={!canEdit || !formStatusAllowed || Boolean(baselineMessage) || busy || selectedDates.length === 0}><Save size={16} />应用到所选日期</Button>
+          {baselineMessage && <p className="form-error" role="alert">{baselineMessage}</p>}<div className="admin-actions"><Button type="submit" disabled={!canEdit || !formStatusAllowed || Boolean(baselineMessage) || busy || selectedDates.length === 0}><Save size={16} />应用到所选日期</Button></div>
         </form> : selectedLocked || !canEdit ? <div className="employee-readonly">{selectedLocked ? "该业务日期已到报备截止时间，记录只读" : "当前参数不允许员工提报"}</div> : <form onSubmit={save} className="employee-form">
-          <RecordFields form={form} setForm={setForm} statuses={config?.allowedStatuses ?? []} disabled={busy} />
+          <RecordFields form={form} setForm={setForm} statuses={config?.allowedStatuses ?? []} disabled={busy} repeat={editingId === null ? { dates, selectedDay, copyDates, setCopyDates, repeatWeeks, setRepeatWeeks } : undefined} />
           {!formStatusAllowed && <p className="form-error">当前状态已不允许员工提报，请选择其他状态。</p>}{baselineMessage && <p className="form-error" role="alert">{baselineMessage}</p>}
           <div className="admin-actions"><Button type="submit" disabled={busy || !formStatusAllowed || Boolean(baselineMessage)}><Save size={16} />{editingId ? "保存修改" : "新增时段"}</Button>{editingId && <Button type="button" variant="outline" onClick={() => { setEditingId(null); setForm(initialForm(selectedDay, config?.allowedStatuses[0]?.statusCode ?? "")); }}>取消</Button>}{editingId && <Button type="button" variant="outline" disabled={busy} onClick={() => { const row = records.find((record) => record.id === editingId); if (row) void remove(row); }}><Trash2 size={15} />删除</Button>}</div>
         </form>}
       </section>
       <aside className="employee-detail"><h2>当天记录</h2>{records.filter((row) => row.businessDate === selectedDay).map((row) => <div className="employee-detail-row" key={row.id}><strong>{config?.allowedStatuses.find((status) => status.statusCode === row.statusCode)?.statusName ?? row.statusCode} · {hkTime(row.startTime)}–{hkDate(row.endTime) !== selectedDay ? "次日 " : ""}{hkTime(row.endTime)}</strong><span>{sources.find((source) => source.sourceCode === row.sourceCode)?.sourceName ?? row.sourceCode}</span>{row.remark && <p>{row.remark}</p>}</div>)}{records.every((row) => row.businessDate !== selectedDay) && <p className="muted-text">当天暂无记录</p>}<p className="employee-note">标准产品对接独立消息提醒模块，Demo 不发送消息。</p></aside>
     </div>
-    {error && <p className="form-error" role="alert">{error}</p>}{message && <p className="form-success" role="status">{message}</p>}
+    {error && <p className="form-error" role="alert">{error}</p>}{message && <p className="form-success employee-success-toast" role="status"><CheckCircle2 size={18} aria-hidden="true" /><span>{message}</span></p>}
     {batchResult && <section className="batch-results" aria-label="批量操作结果"><h2>逐项结果</h2>{batchResult.results.length === 0 && <p className="muted-text">没有可复制的记录</p>}{batchResult.results.map((result, index) => <div className={result.success ? "batch-ok" : "batch-fail"} key={`${result.businessDate}-${result.sourceId ?? index}`}><strong>{result.businessDate}</strong><span>{result.success ? "已新增" : result.message ?? "失败"}</span></div>)}</section>}
   </div>;
 }
@@ -239,6 +251,25 @@ function EmployeeDayTimeline({ day, records, config, locked, canDrag, onCreate, 
   </div>;
 }
 
-function RecordFields({ form, setForm, statuses, disabled }: { form: Form; setForm: React.Dispatch<React.SetStateAction<Form>>; statuses: AllowedStatus[]; disabled: boolean }) {
-  return <div className="admin-form-grid"><label>可排性状态<select name="statusCode" value={form.statusCode} disabled={disabled} onChange={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, statusCode: value })); }}>{form.statusCode && !statuses.some((status) => status.statusCode === form.statusCode) && <option value={form.statusCode} disabled>{form.statusCode}（当前不可选择）</option>}{statuses.map((status) => <option value={status.statusCode} key={status.statusCode}>{status.statusName}</option>)}</select></label><label>开始时间<input name="startTime" type="time" required disabled={disabled} value={form.startTime} onInput={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, startTime: value })); }} onChange={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, startTime: value })); }} /></label><label>结束时间<input name="endTime" type="time" required disabled={disabled} value={form.endTime} onInput={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, endTime: value })); }} onChange={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, endTime: value })); }} /></label><label>结束日期<select name="endDayOffset" value={form.endDayOffset} disabled={disabled} onChange={(event) => { const value = Number(event.currentTarget.value); setForm((current) => ({ ...current, endDayOffset: value })); }}><option value={0}>当天</option><option value={1}>次日（跨午夜）</option></select></label><label className="employee-remark">备注<input name="remark" maxLength={500} disabled={disabled} value={form.remark} onChange={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, remark: value })); }} /></label></div>;
+type RepeatProps = { dates: string[]; selectedDay: string; copyDates: string[]; setCopyDates: React.Dispatch<React.SetStateAction<string[]>>; repeatWeeks: number; setRepeatWeeks: React.Dispatch<React.SetStateAction<number>> };
+
+function RecordFields({ form, setForm, statuses, disabled, repeat }: { form: Form; setForm: React.Dispatch<React.SetStateAction<Form>>; statuses: AllowedStatus[]; disabled: boolean; repeat?: RepeatProps }) {
+  return <div className="admin-form-grid employee-record-fields">
+    <label>可排性状态<select name="statusCode" value={form.statusCode} disabled={disabled} onChange={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, statusCode: value })); }}>{form.statusCode && !statuses.some((status) => status.statusCode === form.statusCode) && <option value={form.statusCode} disabled>{form.statusCode}（当前不可选择）</option>}{statuses.map((status) => <option value={status.statusCode} key={status.statusCode}>{status.statusName}</option>)}</select></label>
+    <div className="employee-time-mode" role="group" aria-label="时间模式"><span>时间模式</span><div><label><input type="radio" name="timeMode" value="segment" checked={!form.allDay} disabled={disabled} onChange={() => setForm((current) => ({ ...current, allDay: false }))} />时段</label><label><input type="radio" name="timeMode" value="allDay" checked={form.allDay} disabled={disabled} onChange={() => setForm((current) => ({ ...current, allDay: true }))} />全天</label></div></div>
+    <label>开始时间<input name="startTime" type="time" required disabled={disabled || form.allDay} value={form.allDay ? "00:00" : form.startTime} onInput={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, startTime: value })); }} onChange={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, startTime: value })); }} /></label>
+    <label>结束时间<input name="endTime" type="time" required disabled={disabled || form.allDay} value={form.allDay ? "00:00" : form.endTime} onInput={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, endTime: value })); }} onChange={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, endTime: value })); }} /></label>
+    <label>结束日期<select name="endDayOffset" value={form.allDay ? 1 : form.endDayOffset} disabled={disabled || form.allDay} onChange={(event) => { const value = Number(event.currentTarget.value); setForm((current) => ({ ...current, endDayOffset: value })); }}><option value={0}>当天</option><option value={1}>次日（跨午夜）</option></select></label>
+    {repeat && <EmployeeRepeatFields {...repeat} disabled={disabled} />}
+    <label className="employee-remark">备注<textarea name="remark" maxLength={500} rows={3} disabled={disabled} value={form.remark} onChange={(event) => { const value = event.currentTarget.value; setForm((current) => ({ ...current, remark: value })); }} /></label>
+  </div>;
+}
+
+function EmployeeRepeatFields({ dates, selectedDay, copyDates, setCopyDates, repeatWeeks, setRepeatWeeks, disabled }: RepeatProps & { disabled: boolean }) {
+  const selectableDates = dates.filter((day) => day !== selectedDay);
+  const copyLabel = copyDates.length ? `已选 ${copyDates.length} 天` : "选择日期";
+  return <>
+    <details className="employee-repeat-picker"><summary><span>复制到</span><span>{copyLabel}</span></summary><div className="employee-repeat-options">{selectableDates.map((day) => <label key={day}><input type="checkbox" disabled={disabled} checked={copyDates.includes(day)} onChange={() => setCopyDates((current) => current.includes(day) ? current.filter((value) => value !== day) : [...current, day].sort())} />{shortDay(day)}</label>)}</div></details>
+    <label>重复周期<select value={repeatWeeks} disabled={disabled} onChange={(event) => setRepeatWeeks(Number(event.currentTarget.value))}><option value={0}>不重复</option><option value={1}>本周及未来 1 周</option><option value={2}>本周及未来 2 周</option><option value={3}>本周及未来 3 周</option><option value={4}>本周及未来 4 周</option><option value={5}>本周及未来 5 周</option><option value={6}>本周及未来 6 周</option><option value={7}>本周及未来 7 周</option><option value={8}>本周及未来 8 周</option></select></label>
+  </>;
 }
