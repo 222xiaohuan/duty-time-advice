@@ -5,6 +5,7 @@ import { AppError, ErrorCode, ok } from "../lib/response";
 import { requireRole } from "../middleware/mockIdentity";
 import { bad, parseId, TENANT_ID } from "../lib/validation";
 import { conditionFields, itemFields, templateFields } from "../lib/templateValidation";
+import { assertOrgAccess } from "../lib/access";
 
 export const templatesRouter = Router();
 
@@ -40,7 +41,7 @@ async function employeeAssociationOf(templateId: number, id: number) {
 async function employeeForAssociation(req: Request, empId: number) {
   const employee = await prisma.dtaEmployee.findFirst({ where: { id: empId, tenantId: TENANT_ID, isDeleted: 0 } });
   if (!employee) throw new AppError(ErrorCode.NOT_FOUND, "员工不存在", 404);
-  if (req.identity?.role === "manager" && employee.orgId !== req.identity.orgId) throw new AppError(ErrorCode.FORBIDDEN, "经理只能关联所辖组织员工", 403);
+  if (req.identity?.role === "manager") assertOrgAccess(req, employee.orgId);
   return employee;
 }
 
@@ -148,7 +149,7 @@ templatesRouter.get("/:id", requireRole("admin", "manager"), async (req, res, ne
     const employees = employeeIds.length === 0 ? [] : await prisma.dtaEmployee.findMany({ where: { tenantId: TENANT_ID, id: { in: employeeIds }, isDeleted: 0 }, select: { id: true, empName: true, orgId: true, empTypeCode: true, postCode: true } });
     const employeeMap = new Map(employees.map((employee) => [employee.id, employee]));
     const visibleAssociations = req.identity?.role === "manager"
-      ? employeeAssociations.filter((row) => employeeMap.get(row.empId)?.orgId === req.identity?.orgId)
+      ? employeeAssociations.filter((row) => employeeMap.get(row.empId)?.orgId !== undefined && (req.identity!.orgIds ?? []).includes(employeeMap.get(row.empId)!.orgId))
       : employeeAssociations;
     ok(res, { ...template, items, conditions, employeeAssociations: visibleAssociations.map((row) => ({ ...row, employee: employeeMap.get(row.empId) ?? null })) });
   } catch (error) { next(error); }
@@ -267,7 +268,7 @@ templatesRouter.get("/:id/employees", requireRole("admin", "manager"), async (re
     const ids = rows.map((row) => row.empId);
     const employees = ids.length === 0 ? [] : await prisma.dtaEmployee.findMany({ where: { tenantId: TENANT_ID, id: { in: ids }, isDeleted: 0 }, select: { id: true, empName: true, orgId: true, empTypeCode: true, postCode: true } });
     const employeeMap = new Map(employees.map((employee) => [employee.id, employee]));
-    ok(res, rows.filter((row) => req.identity?.role !== "manager" || employeeMap.get(row.empId)?.orgId === req.identity?.orgId).map((row) => ({ ...row, employee: employeeMap.get(row.empId) ?? null })));
+    ok(res, rows.filter((row) => req.identity?.role !== "manager" || (employeeMap.get(row.empId)?.orgId !== undefined && (req.identity!.orgIds ?? []).includes(employeeMap.get(row.empId)!.orgId))).map((row) => ({ ...row, employee: employeeMap.get(row.empId) ?? null })));
   } catch (error) { next(error); }
 });
 

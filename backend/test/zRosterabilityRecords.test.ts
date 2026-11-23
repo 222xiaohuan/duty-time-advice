@@ -57,7 +57,7 @@ describe("T004 可排性记录", () => {
   it("员工只能维护本人，经理只能维护所辖组织，管理员只读", async () => {
     const day = "2099-01-12";
     expect((await request(app).post(base).set(employee1).send({ ...input(day), empId: 102 })).status).toBe(403);
-    expect((await request(app).post(base).set(manager1).send({ ...input(day), empId: 102 })).status).toBe(403);
+    expect((await request(app).post(base).set(manager2).send({ ...input(day), empId: 101 })).status).toBe(403);
     expect((await request(app).post(base).set({ "x-mock-role": "admin", "x-mock-user-id": "9001" }).send({ ...input(day), empId: 101 })).status).toBe(403);
     const created = await request(app).post(base).set(manager1).send({ ...input(day, "ROSTERABLE"), empId: 101 });
     expect(created.status).toBe(200);

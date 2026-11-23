@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type PointerEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent } from "react";
 import { ChevronLeft, ChevronRight, Plus, RefreshCw, Save, Search, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { apiDelete, apiGet, apiPatch, apiPost, type StatusDictionaryItem } from "@/lib/api";
@@ -9,7 +9,8 @@ import { shiftPresets, type ShiftPreset } from "@/lib/shiftPresets";
 import { addDays, hkDate, hkTime, hkToday, mondayOf, shortDay } from "@/lib/week";
 
 type Employee = { id: number; empName: string; empTypeCode: string; postCode: string; baselineRule: string | null; priorityRosterEnable: number };
-type Directory = { orgId: number; orgName: string; employees: Employee[] };
+type Organization = { id: number; orgName: string };
+type Directory = { orgId: number; orgName: string; organizations: Organization[]; employees: Employee[] };
 type RecordRow = { id: number; empId: number; businessDate: string; statusCode: string; startTime: string; endTime: string };
 type ShiftRow = { id: number; empId: number; businessDate: string; shiftName: string; startTime: string; endTime: string; durationMinutes: number };
 type Selection = { empId: number; day: string };
@@ -77,6 +78,7 @@ function availabilitySegments(employee: Employee, rows: RecordRow[], day: string
 
 export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; statuses: StatusDictionaryItem[] }) {
   const [directory, setDirectory] = useState<Directory | null>(null);
+  const [selectedOrgId, setSelectedOrgId] = useState<number | null>(profile.orgId ?? null);
   const [monday, setMonday] = useState(() => mondayOf(hkToday()));
   const [day, setDay] = useState(() => hkToday());
   const [mode, setMode] = useState<"week" | "day">("week");
@@ -100,6 +102,7 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [refresh, setRefresh] = useState(0);
+  const managerProfile = useMemo(() => selectedOrgId === null || selectedOrgId === profile.orgId ? profile : { ...profile, orgId: selectedOrgId }, [profile, selectedOrgId]);
   const weekDays = Array.from({ length: 7 }, (_, index) => addDays(monday, index));
   const employees = (directory?.employees ?? []).filter((employee) =>
     (!employeeFilter || String(employee.id) === employeeFilter) && (!typeFilter || employee.empTypeCode === typeFilter) && (!postFilter || employee.postCode === postFilter));
@@ -119,26 +122,26 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
 
   useEffect(() => {
     let active = true;
-    setDirectory(null); setSelection(null); setDialogMode(null); setSelectedMarker(null); setError("");
-    apiGet<Directory>("/manager/employees", profile).then((data) => {
+    setDirectory(null); setSelection(null); setRecords([]); setShifts([]); setDialogMode(null); setSelectedMarker(null); setLoading(true); setError("");
+    apiGet<Directory>("/manager/employees", managerProfile).then((data) => {
       if (!active) return;
       setDirectory(data);
     }).catch((cause: unknown) => { if (active) { setError(errorText(cause)); setLoading(false); } });
     return () => { active = false; };
-  }, [profile]);
+  }, [managerProfile]);
 
   useEffect(() => {
     if (!directory) return;
     let active = true;
     setLoading(true);
     Promise.all([
-      apiGet<RecordRow[]>(`/rosterability-records?orgId=${directory.orgId}&from=${addDays(mode === "day" ? day : monday, -1)}&to=${mode === "day" ? day : weekDays[6]}`, profile),
-      apiGet<ShiftRow[]>(`/mock-shifts?orgId=${directory.orgId}`, profile),
+      apiGet<RecordRow[]>(`/rosterability-records?orgId=${directory.orgId}&from=${addDays(mode === "day" ? day : monday, -1)}&to=${mode === "day" ? day : weekDays[6]}`, managerProfile),
+      apiGet<ShiftRow[]>(`/mock-shifts?orgId=${directory.orgId}`, managerProfile),
     ]).then(([nextRecords, nextShifts]) => {
       if (active) { setRecords(nextRecords); setShifts(nextShifts); setLoading(false); }
     }).catch((cause: unknown) => { if (active) { setError(errorText(cause)); setLoading(false); } });
     return () => { active = false; };
-  }, [directory, monday, day, mode, profile, refresh]);
+  }, [directory, monday, day, mode, managerProfile, refresh]);
 
   useEffect(() => {
     if (!directory) return;
@@ -189,7 +192,7 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
       shiftName: String(values.get("shiftName")), startTime: String(values.get("startTime")),
       endTime: String(values.get("endTime")), endDayOffset: Number(values.get("endDayOffset")),
     };
-    void run(() => apiPatch(`/mock-shifts/${editingId}`, profile, body), "模拟班次已更新").then((saved) => { if (saved) closeDialog(); });
+    void run(() => apiPatch(`/mock-shifts/${editingId}`, managerProfile, body), "模拟班次已更新").then((saved) => { if (saved) closeDialog(); });
   }
 
   function assignPreset(preset: ShiftPreset) {
@@ -198,7 +201,7 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
     const endTime = dragRange ? timeOfMinute(dragRange.end === 1440 ? 0 : dragRange.end) : preset.endTime;
     const endDayOffset = dragRange ? (dragRange.end === 1440 ? 1 : 0) : preset.endDayOffset;
     const body = { empId: selection.empId, businessDate: selection.day, shiftName: preset.name, startTime, endTime, endDayOffset };
-    void run(() => apiPost("/mock-shifts", profile, body), "模拟班次已排入").then((saved) => { if (saved) closeDialog(); });
+    void run(() => apiPost("/mock-shifts", managerProfile, body), "模拟班次已排入").then((saved) => { if (saved) closeDialog(); });
   }
 
   function dayPointerMinute(event: PointerEvent<HTMLDivElement>): number {
@@ -265,7 +268,7 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
 
   function removeShift() {
     if (editingId === null || busy || !window.confirm("删除这个模拟班次？")) return;
-    void run(() => apiDelete(`/mock-shifts/${editingId}`, profile), "模拟班次已删除").then((deleted) => { if (deleted) closeDialog(); });
+    void run(() => apiDelete(`/mock-shifts/${editingId}`, managerProfile), "模拟班次已删除").then((deleted) => { if (deleted) closeDialog(); });
   }
 
   function markers(empId: number, day: string) {
@@ -298,7 +301,7 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
       <div className="schedule-view-switch" role="group" aria-label="模拟排班呈现方式"><button type="button" className={mode === "week" ? "selected" : ""} aria-pressed={mode === "week"} onClick={() => { setMode("week"); closeDialog(); }}>周模式</button><button type="button" className={mode === "day" ? "selected" : ""} aria-pressed={mode === "day"} onClick={() => { setMode("day"); closeDialog(); }}>天模式</button></div>
     </div>
     <div className="schedule-filters">
-      <label>组织<select disabled value={directory?.orgId ?? ""}><option value={directory?.orgId ?? ""}>{directory?.orgName ?? "加载中"}</option></select></label>
+      <label>组织<select value={selectedOrgId ?? ""} onChange={(event) => { const next = Number(event.currentTarget.value); if (!Number.isInteger(next)) return; setSelectedOrgId(next); setEmployeeFilter(""); setTypeFilter(""); setPostFilter(""); closeDialog(); setSelectedMarker(null); setNotice(""); }} disabled={!directory || directory.organizations.length < 2}><option value="" disabled>加载中</option>{directory?.organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.orgName}</option>)}</select></label>
       <label>员工<select value={employeeFilter} onChange={(event) => { setEmployeeFilter(event.target.value); setSelectedMarker(null); }}><option value="">全部员工</option>{directory?.employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.empName}</option>)}</select></label>
       <label>员工类型<select value={typeFilter} onChange={(event) => { setTypeFilter(event.target.value); setSelectedMarker(null); }}><option value="">全部类型</option>{employeeTypes.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label>
       <label>岗位<select value={postFilter} onChange={(event) => { setPostFilter(event.target.value); setSelectedMarker(null); }}><option value="">全部岗位</option>{posts.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label>

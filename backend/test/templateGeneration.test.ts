@@ -69,7 +69,7 @@ describe("T003 模板维护与经理生成", () => {
 
   it("只接受经理触发，并按组织隔离", async () => {
     expect((await request(app).post("/api/template-generation").set(admin).send({})).status).toBe(403);
-    expect((await request(app).post("/api/template-generation").set({ ...manager1, "x-mock-org-id": "2" }).send({})).status).toBe(403);
+    expect((await request(app).post("/api/template-generation").set({ ...manager1, "x-mock-org-id": "999" }).send({})).status).toBe(403);
     expect((await request(app).post("/api/template-generation").set(manager1).send({ templateId: 999999 })).status).toBe(404);
     const otherOrg = await generateForManager(2, 9102, now);
     expect(otherOrg.summary.created).toBe(0);
@@ -107,7 +107,7 @@ describe("T003 模板维护与经理生成", () => {
     const direct = await request(app).post(`/api/templates/${templateId}/employees`).set(admin).send({ empIds: [1, 501], priority: 5 });
     expect(direct.status).toBe(200);
     expect(direct.body.data.associations).toHaveLength(2);
-    expect((await request(app).post(`/api/templates/${templateId}/employees`).set(manager1).send({ empIds: [2], priority: 0 })).status).toBe(403);
+    expect((await request(app).post(`/api/templates/${templateId}/employees`).set({ "x-mock-role": "manager", "x-mock-user-id": "9102", "x-mock-org-id": "2" }).send({ empIds: [1], priority: 0 })).status).toBe(403);
     const details = await request(app).get(`/api/templates/${templateId}`).set(manager1);
     expect(details.body.data.employeeAssociations.map((row: { empId: number }) => row.empId)).toEqual(expect.arrayContaining([1]));
 

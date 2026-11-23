@@ -5,8 +5,10 @@ import { MANAGER_USER_IDS, MOCK_ROLES, type MockRole } from "../types/enums";
 export interface MockIdentity {
   role: MockRole;
   userId: number;
-  /** manager 的管辖组织；其他角色为 null */
+  /** manager 当前选择的组织；其他角色为 null */
   orgId: number | null;
+  /** manager 可访问的组织范围；其他角色为空数组 */
+  orgIds?: number[];
 }
 
 declare module "express-serve-static-core" {
@@ -20,6 +22,12 @@ function parsePositiveInt(value: string | undefined): number | null {
   const n = Number(value);
   return n > 0 ? n : null;
 }
+
+/** Demo 主管权限范围。标准产品由实际权限模型替换；请求中的 orgId 只是当前选择。 */
+export const MANAGER_ORG_IDS: Readonly<Record<number, readonly number[]>> = {
+  [MANAGER_USER_IDS.org1]: [1, 2],
+  [MANAGER_USER_IDS.org2]: [2],
+};
 
 /**
  * 从请求头解析 Mock 身份：x-mock-role、x-mock-user-id、x-mock-org-id。
@@ -40,12 +48,14 @@ export function mockIdentity(req: Request, _res: Response, next: NextFunction): 
     if (orgId === null) {
       return next(new AppError(ErrorCode.UNAUTHORIZED, "manager 角色必须提供 x-mock-org-id", 401));
     }
-    const expectedUserId = orgId === 1 ? MANAGER_USER_IDS.org1 : orgId === 2 ? MANAGER_USER_IDS.org2 : null;
-    if (userId !== expectedUserId) {
-      return next(new AppError(ErrorCode.FORBIDDEN, "经理账号与管辖组织不匹配", 403));
+    const allowedOrgIds = MANAGER_ORG_IDS[userId];
+    if (!allowedOrgIds || !allowedOrgIds.includes(orgId)) {
+      return next(new AppError(ErrorCode.FORBIDDEN, "经理账号无权访问该组织", 403));
     }
+    req.identity = { role: role as MockRole, userId, orgId, orgIds: [...allowedOrgIds] };
+    return next();
   }
-  req.identity = { role: role as MockRole, userId, orgId };
+  req.identity = { role: role as MockRole, userId, orgId, orgIds: [] };
   next();
 }
 

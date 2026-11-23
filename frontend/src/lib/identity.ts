@@ -11,7 +11,7 @@ export type MockProfile = {
 
 export const profiles: MockProfile[] = [
   { key: "admin", role: "admin", userId: 9001, label: "管理员", group: "管理" },
-  { key: "manager-1", role: "manager", userId: 9101, orgId: 1, label: "沙田马场 · 主管", group: "主管" },
+  { key: "manager-1", role: "manager", userId: 9101, orgId: 1, label: "沙田及跑马地 · 主管", group: "主管" },
   { key: "manager-2", role: "manager", userId: 9102, orgId: 2, label: "跑马地马场 · 主管", group: "主管" },
   { key: "employee-1", role: "employee", userId: 1, label: "陈志明", group: "员工 · 沙田马场" },
   { key: "employee-2", role: "employee", userId: 2, label: "李嘉欣", group: "员工 · 沙田马场" },

@@ -31,7 +31,7 @@ describe("Mock 身份中间件", () => {
 
   it("employee 身份解析成功", async () => {
     const res = await request(app).get("/api/me").set("x-mock-role", "employee").set("x-mock-user-id", "3");
-    expect(res.body).toEqual({ code: 0, msg: "ok", data: { role: "employee", userId: 3, orgId: null } });
+    expect(res.body).toEqual({ code: 0, msg: "ok", data: { role: "employee", userId: 3, orgId: null, orgIds: [] } });
   });
 
   it("manager 身份带管辖组织", async () => {
@@ -40,7 +40,7 @@ describe("Mock 身份中间件", () => {
       .set("x-mock-role", "manager")
       .set("x-mock-user-id", "9101")
       .set("x-mock-org-id", "1");
-    expect(res.body.data).toEqual({ role: "manager", userId: 9101, orgId: 1 });
+    expect(res.body.data).toEqual({ role: "manager", userId: 9101, orgId: 1, orgIds: [1, 2] });
   });
 });
 

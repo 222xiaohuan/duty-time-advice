@@ -2,7 +2,7 @@ import type { MockRole, RosterabilityStatusCode, SourceCodeValue } from "./enums
 import type { MockProfile } from "./identity";
 
 export type ApiResponse<T> = { code: number; msg: string; data: T };
-export type MockIdentity = { role: MockRole; userId: number; orgId: number | null };
+export type MockIdentity = { role: MockRole; userId: number; orgId: number | null; orgIds: number[] };
 export type Health = { status: string; db: string };
 export type StatusDictionaryItem = {
   id: number;

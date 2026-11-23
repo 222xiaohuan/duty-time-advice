@@ -30,20 +30,34 @@ describe("T010 经理员工目录", () => {
     const first = await request(app).get("/api/manager/employees").set(manager1);
     expect(first.status).toBe(200);
     expect(first.body.data.orgId).toBe(1);
+    expect(first.body.data.organizations).toEqual(expect.arrayContaining([{ id: 1, orgName: expect.any(String) }, { id: 2, orgName: expect.any(String) }]));
     expect(first.body.data.employees).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 701, empTypeCode: "T010C_ROSTERABLE", postCode: "BETTING_SERVICE", cutoffDays: 3, baselineRule: "BASE_ROSTERABLE", priorityRosterEnable: 1 }),
       expect.objectContaining({ id: 703, empTypeCode: "T010C_UNROSTERABLE", cutoffDays: 2, baselineRule: "BASE_UNROSTERABLE", priorityRosterEnable: 0 }),
     ]));
     expect(first.body.data.employees.some((row: { id: number }) => row.id === 702)).toBe(false);
+    const firstOnSecondOrg = await request(app).get("/api/manager/employees").set({ ...manager1, "x-mock-org-id": "2" });
+    expect(firstOnSecondOrg.status).toBe(200);
+    expect(firstOnSecondOrg.body.data.orgId).toBe(2);
+    expect(firstOnSecondOrg.body.data.employees).toEqual(expect.arrayContaining([expect.objectContaining({ id: 702 })]));
+    expect(firstOnSecondOrg.body.data.employees.some((row: { id: number }) => row.id === 701)).toBe(false);
     const second = await request(app).get("/api/manager/employees").set(manager2);
     expect(second.status).toBe(200);
     expect(second.body.data.employees).toEqual(expect.arrayContaining([expect.objectContaining({ id: 702, cutoffDays: null, baselineRule: null })]));
     expect(second.body.data.employees.some((row: { id: number }) => row.id === 701)).toBe(false);
   });
 
-  it("员工和管理员无法访问，经理身份不能伪造管辖组织", async () => {
+  it("员工和管理员无法访问，经理不能访问范围外组织", async () => {
     expect((await request(app).get("/api/manager/employees").set({ "x-mock-role": "employee", "x-mock-user-id": "701" })).status).toBe(403);
     expect((await request(app).get("/api/manager/employees").set({ "x-mock-role": "admin", "x-mock-user-id": "9001" })).status).toBe(403);
-    expect((await request(app).get("/api/manager/employees").set({ "x-mock-role": "manager", "x-mock-user-id": "9101", "x-mock-org-id": "2" })).status).toBe(403);
+    expect((await request(app).get("/api/manager/employees").set({ "x-mock-role": "manager", "x-mock-user-id": "9101", "x-mock-org-id": "999" })).status).toBe(403);
+  });
+
+  it("可排性记录和模拟班次查询沿用当前组织选择并拒绝范围外组织", async () => {
+    const manager1Org2 = { ...manager1, "x-mock-org-id": "2" };
+    expect((await request(app).get("/api/rosterability-records").query({ orgId: 2 }).set(manager1Org2)).status).toBe(200);
+    expect((await request(app).get("/api/mock-shifts").query({ orgId: 2 }).set(manager1Org2)).status).toBe(200);
+    expect((await request(app).get("/api/rosterability-records").query({ orgId: 999 }).set(manager1Org2)).status).toBe(403);
+    expect((await request(app).get("/api/mock-shifts").query({ orgId: 999 }).set(manager1Org2)).status).toBe(403);
   });
 });

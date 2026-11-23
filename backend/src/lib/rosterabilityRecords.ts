@@ -30,7 +30,10 @@ export async function employeeFor(identity: MockIdentity, empId: number): Promis
   if (identity.role === "employee" && identity.userId !== empId) forbidden("员工只能维护本人记录");
   const employee = await prisma.dtaEmployee.findFirst({ where: { id: empId, tenantId: TENANT_ID, isDeleted: 0 } });
   if (!employee) missing("员工不存在");
-  if (identity.role === "manager" && identity.orgId !== employee.orgId) forbidden("经理只能维护所辖组织员工记录");
+  if (identity.role === "manager") {
+    const managerOrgIds = identity.orgIds ?? (identity.orgId === null ? [] : [identity.orgId]);
+    if (!managerOrgIds.includes(employee.orgId)) forbidden("经理只能维护所辖组织员工记录");
+  }
   return employee;
 }
 
@@ -169,7 +172,10 @@ export async function deleteRecord(identity: MockIdentity, id: number, now: Date
 
 export async function listRecords(identity: MockIdentity, filters: { empId?: number; orgId?: number; from?: string; to?: string }) {
   if (identity.role === "employee" && filters.empId !== undefined && filters.empId !== identity.userId) forbidden("员工只能查看本人记录");
-  if (identity.role === "manager" && filters.orgId !== undefined && filters.orgId !== identity.orgId) forbidden("经理只能查看所辖组织记录");
+  if (identity.role === "manager" && filters.orgId !== undefined) {
+    const managerOrgIds = identity.orgIds ?? (identity.orgId === null ? [] : [identity.orgId]);
+    if (!managerOrgIds.includes(filters.orgId)) forbidden("经理只能查看所辖组织记录");
+  }
   if (filters.empId !== undefined) await employeeFor(identity, filters.empId);
   if (filters.from && filters.to && filters.from > filters.to) bad("from 不得晚于 to");
   const rows = await prisma.dtaRosterabilityRecord.findMany({ where: {

@@ -9,7 +9,8 @@ export function identityOf(req: Request) {
 
 export function assertOrgAccess(req: Request, orgId: number): void {
   const identity = identityOf(req);
-  if (identity.role === "manager" && identity.orgId !== orgId) {
+  const managerOrgIds = identity.orgIds ?? (identity.orgId === null ? [] : [identity.orgId]);
+  if (identity.role === "manager" && !managerOrgIds.includes(orgId)) {
     throw new AppError(ErrorCode.FORBIDDEN, "无权访问该组织数据", 403);
   }
 }

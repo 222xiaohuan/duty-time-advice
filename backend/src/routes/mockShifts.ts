@@ -60,7 +60,7 @@ mockShiftsRouter.get("/", async (req, res, next) => {
     if (empId !== undefined) assertEmployeeAccess(req, empId);
     const orgId = req.query.orgId === undefined ? undefined : parseId(req.query.orgId, "orgId");
     if (orgId !== undefined) assertOrgAccess(req, orgId);
-    if (identity.role === "manager" && orgId !== undefined && identity.orgId !== orgId) throw new AppError(40300, "无权访问该组织数据", 403);
+    // assertOrgAccess 已按主管的完整组织权限范围校验当前查询组织。
     const rows = await prisma.dtaMockShift.findMany({ where: { tenantId: TENANT_ID, isDeleted: 0, ...(empId ? { empId } : {}), ...(orgId ? { orgId } : {}), ...(identity.role === "employee" ? { empId: identity.userId } : {}), ...(identity.role === "manager" ? { orgId: identity.orgId! } : {}) }, orderBy: [{ businessDate: "asc" }, { startTime: "asc" }] });
     ok(res, rows);
   } catch (error) { next(error); }
