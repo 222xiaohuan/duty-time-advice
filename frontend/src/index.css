@@ -775,6 +775,8 @@ button { cursor: pointer; }
 .parameter-scheme-toolbar-actions input:focus { outline: 2px solid #82adcf; outline-offset: 1px; }
 .parameter-scheme-table td:nth-child(3) { width: 18%; color: #65717d; }
 .parameter-authorization-summary { display: inline-flex; align-items: center; gap: 5px; color: #526171; white-space: nowrap; }
+.parameter-authorization-summary > span { display: flex; flex-direction: column; gap: 3px; }
+.parameter-authorization-summary small { color: #788590; font-size: 11px; }
 .parameter-generic-rule { margin-top: 4px; }
 .parameter-authorization-dialog { width: min(900px, calc(100vw - 28px)); }
 .authorization-section { padding: 4px 0 18px; border-bottom: 1px solid var(--border); }

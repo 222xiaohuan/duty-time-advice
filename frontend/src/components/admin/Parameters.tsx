@@ -29,6 +29,29 @@ function treeOf(orgs: Org[], parentId: number | null = null): OrgNode[] {
   return orgs.filter((org) => org.parentOrgId === parentId).map((org) => ({ ...org, children: treeOf(orgs, org.id) }));
 }
 
+function authorizationCounts(rows: Authorization[], orgs: Org[]) {
+  const rootOrgIds = new Set(rows.map((row) => row.orgId));
+  const typeCodes = new Set(rows.map((row) => row.empTypeCode));
+  const activeOrgIds = new Set(orgs.map((org) => org.id));
+  const children = new Map<number, number[]>();
+  for (const org of orgs) {
+    if (org.parentOrgId !== null) children.set(org.parentOrgId, [...(children.get(org.parentOrgId) ?? []), org.id]);
+  }
+  const coveredOrgIds = new Set<number>();
+  for (const row of rows) {
+    const pending = [row.orgId];
+    const visited = new Set<number>();
+    while (pending.length) {
+      const orgId = pending.pop()!;
+      if (visited.has(orgId)) continue;
+      visited.add(orgId);
+      if (activeOrgIds.has(orgId)) coveredOrgIds.add(orgId);
+      if (row.includeChildren === 1) pending.push(...(children.get(orgId) ?? []));
+    }
+  }
+  return { rootCount: rootOrgIds.size, coveredCount: coveredOrgIds.size, typeCount: typeCodes.size };
+}
+
 function OrgTree({ nodes, selected, expanded, onToggle, onExpand, level = 0 }: { nodes: OrgNode[]; selected: number[]; expanded: number[]; onToggle: (id: number, checked: boolean) => void; onExpand: (id: number) => void; level?: number }): ReactNode {
   return nodes.map((node) => {
     const open = expanded.includes(node.id);
@@ -147,7 +170,7 @@ export function Parameters({ profile }: { profile: MockProfile }) {
     {error && !authorizationScheme && <p className="form-error" role="alert">{error}</p>}{message && <p className="form-success" role="status">{message}</p>}
     <section className="parameter-scheme-section">
       <div className="parameter-scheme-toolbar"><div><h3>参数模板</h3><p>模板只维护一套通用规则，在授权时指定组织范围和员工类型。</p></div><div className="parameter-scheme-toolbar-actions"><label>查找模板<input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="模板名称或描述" /></label><Button type="button" onClick={() => openSchemeDialog("create")}><Plus size={16} />新增参数模板</Button></div></div>
-      <div className="parameter-scheme-table-wrap"><table className="parameter-scheme-table"><thead><tr><th>参数模板名称</th><th>参数模板描述</th><th>授权范围</th><th>操作</th></tr></thead><tbody>{visibleSchemes.map((scheme) => <tr key={scheme.id}><td><button type="button" className="parameter-scheme-name-link" onClick={() => setDetailScheme(scheme)} aria-label={`查看${scheme.schemeName}配置详情`}><strong>{scheme.schemeName}</strong></button><small>{scheme.assignedOrgIds.length ? `已授权 ${scheme.assignedOrgIds.length} 个组织` : "尚未授权组织"}</small></td><td>{scheme.description || "—"}</td><td><span className="parameter-authorization-summary"><UsersRound size={14} />{scheme.authorizations?.length ? `${new Set(scheme.authorizations.map((row) => row.orgId)).size} 个组织 · ${new Set(scheme.authorizations.map((row) => row.empTypeCode)).size} 种员工类型` : "未配置授权"}</span></td><td><div className="parameter-scheme-actions"><Button type="button" variant="outline" size="sm" onClick={() => openSchemeDialog("copy", scheme)}><Copy size={14} />复制模板</Button><Button type="button" variant="outline" size="sm" onClick={() => openSchemeDialog("edit", scheme)}><Pencil size={14} />编辑模板</Button><Button type="button" variant="outline" size="sm" disabled={busy || scheme.assignedOrgIds.length > 0} title={scheme.assignedOrgIds.length ? "已授权组织的模板需先解除授权" : "删除模板"} onClick={() => void deleteScheme(scheme)}><Trash2 size={14} />删除模板</Button><Button type="button" variant="outline" size="sm" onClick={() => openAuthorization(scheme)}><ShieldCheck size={14} />模板授权</Button></div></td></tr>)}{!visibleSchemes.length && <tr><td colSpan={4} className="parameter-scheme-empty">暂无参数模板，请先新增。</td></tr>}</tbody></table></div>
+      <div className="parameter-scheme-table-wrap"><table className="parameter-scheme-table"><thead><tr><th>参数模板名称</th><th>参数模板描述</th><th>授权范围</th><th>操作</th></tr></thead><tbody>{visibleSchemes.map((scheme) => { const counts = authorizationCounts(scheme.authorizations ?? [], orgs); return <tr key={scheme.id}><td><button type="button" className="parameter-scheme-name-link" onClick={() => setDetailScheme(scheme)} aria-label={`查看${scheme.schemeName}配置详情`}><strong>{scheme.schemeName}</strong></button><small>{counts.rootCount ? `已授权 ${counts.rootCount} 个组织` : "尚未授权组织"}</small></td><td>{scheme.description || "—"}</td><td><span className="parameter-authorization-summary"><UsersRound size={14} /><span>{counts.rootCount ? `${counts.rootCount} 个组织 · ${counts.typeCount} 种员工类型` : "未配置授权"}{counts.coveredCount > counts.rootCount && <small>含子组织，覆盖 {counts.coveredCount} 个组织</small>}</span></span></td><td><div className="parameter-scheme-actions"><Button type="button" variant="outline" size="sm" onClick={() => openSchemeDialog("copy", scheme)}><Copy size={14} />复制模板</Button><Button type="button" variant="outline" size="sm" onClick={() => openSchemeDialog("edit", scheme)}><Pencil size={14} />编辑模板</Button><Button type="button" variant="outline" size="sm" disabled={busy || scheme.assignedOrgIds.length > 0} title={scheme.assignedOrgIds.length ? "已授权组织的模板需先解除授权" : "删除模板"} onClick={() => void deleteScheme(scheme)}><Trash2 size={14} />删除模板</Button><Button type="button" variant="outline" size="sm" onClick={() => openAuthorization(scheme)}><ShieldCheck size={14} />模板授权</Button></div></td></tr>; })}{!visibleSchemes.length && <tr><td colSpan={4} className="parameter-scheme-empty">暂无参数模板，请先新增。</td></tr>}</tbody></table></div>
     </section>
     {detailScheme && (() => {
       const rule = ruleOf(detailScheme);
