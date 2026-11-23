@@ -38,7 +38,7 @@ function OrgTree({ nodes, selected, expanded, onToggle, onExpand, level = 0 }: {
         {node.children.length ? <button type="button" className="authorization-org-expand" aria-label={open ? `收起${node.orgName}` : `展开${node.orgName}`} onClick={() => onExpand(node.id)}>{open ? <ChevronDown size={15} /> : <ChevronRight size={15} />}</button> : <span className="authorization-org-indent" />}
         <input type="checkbox" checked={selected.includes(node.id)} onChange={(event) => onToggle(node.id, event.target.checked)} />
         <Building2 size={15} className={level < 2 ? "authorization-org-icon" : "authorization-org-icon leaf"} />
-        <span>{node.orgName}</span><small>#{node.id}</small>
+        <span>{node.orgName}</span>
       </div>
       {open && node.children.length > 0 && <OrgTree nodes={node.children} selected={selected} expanded={expanded} onToggle={onToggle} onExpand={onExpand} level={level + 1} />}
     </div>;

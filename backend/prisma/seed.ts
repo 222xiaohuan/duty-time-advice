@@ -1,6 +1,6 @@
 /**
  * Demo 种子数据（T001）。仅用于本地 SQLite，执行时清空 dta_ 表后重新写入。
- * 包含：租户、13 个五层组织树节点、员工、状态与来源字典、通用参数模板、模拟班次。
+ * 包含：租户、20 个五层组织树节点、员工、状态与来源字典、通用参数模板、模拟班次。
  * 不包含：周期模板（T003/T012 补充）、日期标签、导入任务。
  */
 import { createPrismaClient } from "../src/lib/prisma";
@@ -46,19 +46,26 @@ async function main() {
   await prisma.dtaTenant.create({ data: { id: tenantId, tenantName: "HKJC Demo", ...by } });
 
   const rootOrg = await prisma.dtaOrg.create({ data: { id: 11, tenantId, orgName: "JC001 JC", ...by } });
-  const hkgOrg = await prisma.dtaOrg.create({ data: { id: 12, tenantId, orgName: "HKG Hong Kong", parentOrgId: rootOrg.id, ...by } });
-  const org1 = await prisma.dtaOrg.create({ data: { id: 1, tenantId, orgName: "沙田马场 · 投注服务部", parentOrgId: hkgOrg.id, ...by } });
-  const org2 = await prisma.dtaOrg.create({ data: { id: 2, tenantId, orgName: "跑马地马场 · 客户服务部", parentOrgId: hkgOrg.id, ...by } });
+  await prisma.dtaOrg.create({ data: { id: 12, tenantId, orgName: "CTC Conghua", parentOrgId: rootOrg.id, ...by } });
+  const hkgOrg = await prisma.dtaOrg.create({ data: { id: 13, tenantId, orgName: "HKG Hong Kong", parentOrgId: rootOrg.id, ...by } });
+  const org1 = await prisma.dtaOrg.create({ data: { id: 1, tenantId, orgName: "JC003 Catering", parentOrgId: hkgOrg.id, ...by } });
+  const org2 = await prisma.dtaOrg.create({ data: { id: 2, tenantId, orgName: "JC004 Retail", parentOrgId: hkgOrg.id, ...by } });
   await prisma.dtaOrg.createMany({ data: [
-    { id: 3, orgName: "沙田马场 · 客户服务部", parentOrgId: org1.id },
-    { id: 4, orgName: "沙田马场 · 场地运营部", parentOrgId: org1.id },
-    { id: 5, orgName: "沙田马场 · 人流管理部", parentOrgId: org1.id },
-    { id: 6, orgName: "跑马地马场 · 投注服务部", parentOrgId: org2.id },
-    { id: 7, orgName: "跑马地马场 · 场地运营部", parentOrgId: org2.id },
-    { id: 8, orgName: "跑马地马场 · 人流管理部", parentOrgId: org2.id },
-    { id: 9, orgName: "总部 · 客户支持部", parentOrgId: hkgOrg.id },
-    { id: 10, orgName: "总部 · 活动协调部", parentOrgId: hkgOrg.id },
-    { id: 13, orgName: "BRCC Beas River Country Club · Outlet01", parentOrgId: 3 },
+    { id: 3, orgName: "BRCC Beas River Country Club", parentOrgId: org1.id },
+    { id: 4, orgName: "HVCH Happy Valley Clubhouse", parentOrgId: org1.id },
+    { id: 5, orgName: "HVRC Happy Valley Racecourse", parentOrgId: org1.id },
+    { id: 6, orgName: "STCH Sha Tin Clubhouse", parentOrgId: org1.id },
+    { id: 7, orgName: "STRC Sha Tin Racecourse", parentOrgId: org1.id },
+    { id: 8, orgName: "JC003005 BRCC Outlet01", parentOrgId: 3 },
+    { id: 9, orgName: "JC003001001 HVCH Kitchen1", parentOrgId: 4 },
+    { id: 10, orgName: "JC003001002 HVCH Kitchen2", parentOrgId: 4 },
+    { id: 14, orgName: "JC003004 HVCH Outlet01", parentOrgId: 4 },
+    { id: 15, orgName: "JC003001 HVRC Outlet01", parentOrgId: 5 },
+    { id: 16, orgName: "JC003006 HVRC Outlet02", parentOrgId: 5 },
+    { id: 17, orgName: "JC003002 STCH Outlet01", parentOrgId: 6 },
+    { id: 18, orgName: "JC003002001 STCH Kitchen1", parentOrgId: 6 },
+    { id: 19, orgName: "JC003002002 STCH Kitchen2", parentOrgId: 6 },
+    { id: 20, orgName: "JC003003 STRC Outlet01", parentOrgId: 7 },
   ].map((org) => ({ ...org, tenantId, ...by })) });
 
   const employees = [
