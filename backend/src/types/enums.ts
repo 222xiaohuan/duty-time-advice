@@ -30,7 +30,7 @@ export const ADMIN_USER_ID = 9001;
 export const MANAGER_USER_IDS = { org1: 9101, org2: 9102 } as const;
 
 /** 员工类型编码（Demo 不建字典表，编码在此约定） */
-export const EMP_TYPE_CODES = { FULL_TIME: "FULL_TIME", PART_TIME: "PART_TIME" } as const;
+export const EMP_TYPE_CODES = { FULL_TIME: "FULL_TIME", CONTRACT_PT: "CONTRACT_PT", CASUAL_PT: "CASUAL_PT" } as const;
 
 /** 岗位编码（Demo 不建字典表，编码在此约定） */
 export const POST_CODES = {

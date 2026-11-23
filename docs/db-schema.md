@@ -107,7 +107,7 @@
 | tenant_id | int | 租户 ID |
 | org_id | int | 组织 ID |
 | emp_name | text(100) | 员工姓名 |
-| emp_type_code | text(50) | 员工类型编码 |
+| emp_type_code | text(50) | 员工类型编码：`FULL_TIME`、`CONTRACT_PT`、`CASUAL_PT` |
 | post_code | text(50) | 岗位编码 |
 | is_deleted | int | 默认 0 |
 | created_at | datetime | 创建时间 |

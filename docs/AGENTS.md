@@ -13,6 +13,7 @@
 3. 中文统一使用“可排”、“不可排”和“可排性”。
 4. `locked` 是只读标记，不得作为可排性状态或覆盖原状态。
 5. 不得擅自新增业务枚举、状态编码或字段。
+6. Demo 员工类型编码为 `FULL_TIME`（Full Time）、`CONTRACT_PT`（Contract PT）、`CASUAL_PT`（Casual PT）；参数授权和模板条件按三类分别处理。
 
 ## 3. Demo 业务边界
 

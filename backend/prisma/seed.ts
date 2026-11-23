@@ -71,18 +71,18 @@ async function main() {
   const employees = [
     { id: 1, orgId: org1.id, empName: "陈志明", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.BETTING_SERVICE },
     { id: 2, orgId: org1.id, empName: "李嘉欣", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.CROWD_CONTROL },
-    { id: 3, orgId: org1.id, empName: "黄伟强", empTypeCode: EMP_TYPE_CODES.PART_TIME, postCode: POST_CODES.BETTING_SERVICE },
-    { id: 4, orgId: org1.id, empName: "张美玲", empTypeCode: EMP_TYPE_CODES.PART_TIME, postCode: POST_CODES.CROWD_CONTROL },
+    { id: 3, orgId: org1.id, empName: "黄伟强", empTypeCode: EMP_TYPE_CODES.CONTRACT_PT, postCode: POST_CODES.BETTING_SERVICE },
+    { id: 4, orgId: org1.id, empName: "张美玲", empTypeCode: EMP_TYPE_CODES.CASUAL_PT, postCode: POST_CODES.CROWD_CONTROL },
     { id: 9, orgId: org1.id, empName: "王志豪", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.BETTING_SERVICE },
-    { id: 10, orgId: org1.id, empName: "陈雅婷", empTypeCode: EMP_TYPE_CODES.PART_TIME, postCode: POST_CODES.CROWD_CONTROL },
+    { id: 10, orgId: org1.id, empName: "陈雅婷", empTypeCode: EMP_TYPE_CODES.CONTRACT_PT, postCode: POST_CODES.CROWD_CONTROL },
     { id: 11, orgId: org1.id, empName: "林家俊", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.CROWD_CONTROL },
-    { id: 12, orgId: org1.id, empName: "何嘉怡", empTypeCode: EMP_TYPE_CODES.PART_TIME, postCode: POST_CODES.BETTING_SERVICE },
+    { id: 12, orgId: org1.id, empName: "何嘉怡", empTypeCode: EMP_TYPE_CODES.CASUAL_PT, postCode: POST_CODES.BETTING_SERVICE },
     { id: 13, orgId: org1.id, empName: "梁文杰", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.BETTING_SERVICE },
-    { id: 14, orgId: org1.id, empName: "苏晓彤", empTypeCode: EMP_TYPE_CODES.PART_TIME, postCode: POST_CODES.CROWD_CONTROL },
+    { id: 14, orgId: org1.id, empName: "苏晓彤", empTypeCode: EMP_TYPE_CODES.CASUAL_PT, postCode: POST_CODES.CROWD_CONTROL },
     { id: 5, orgId: org2.id, empName: "刘家豪", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.CUSTOMER_SERVICE },
     { id: 6, orgId: org2.id, empName: "吴咏诗", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.CROWD_CONTROL },
-    { id: 7, orgId: org2.id, empName: "林俊杰", empTypeCode: EMP_TYPE_CODES.PART_TIME, postCode: POST_CODES.CUSTOMER_SERVICE },
-    { id: 8, orgId: org2.id, empName: "何慧琳", empTypeCode: EMP_TYPE_CODES.PART_TIME, postCode: POST_CODES.BETTING_SERVICE },
+    { id: 7, orgId: org2.id, empName: "林俊杰", empTypeCode: EMP_TYPE_CODES.CONTRACT_PT, postCode: POST_CODES.CUSTOMER_SERVICE },
+    { id: 8, orgId: org2.id, empName: "何慧琳", empTypeCode: EMP_TYPE_CODES.CASUAL_PT, postCode: POST_CODES.BETTING_SERVICE },
   ];
   for (const e of employees) await prisma.dtaEmployee.create({ data: { tenantId, ...e, ...by } });
 
@@ -108,19 +108,18 @@ async function main() {
   const rosterableScheme = await prisma.dtaParamScheme.create({ data: { tenantId, schemeName: "常规报备模板", description: "默认可排，员工补充不可排时段", createdBy: ADMIN_USER_ID } });
   const unrosterableScheme = await prisma.dtaParamScheme.create({ data: { tenantId, schemeName: "弹性报备模板", description: "默认不可排，员工补充可排时段", createdBy: ADMIN_USER_ID } });
   await prisma.dtaParamSchemeRule.createMany({ data: [
-    { tenantId, schemeId: rosterableScheme.id, empTypeCode: EMP_TYPE_CODES.FULL_TIME, cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_ROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_UNROSTERABLE, empEditEnable: 1, priorityRosterEnable: 0, autoGenRangeWeek: 4 },
-    { tenantId, schemeId: rosterableScheme.id, empTypeCode: EMP_TYPE_CODES.PART_TIME, cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_ROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_UNROSTERABLE, empEditEnable: 1, priorityRosterEnable: 0, autoGenRangeWeek: 4 },
-    { tenantId, schemeId: unrosterableScheme.id, empTypeCode: EMP_TYPE_CODES.FULL_TIME, cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_UNROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_ROSTERABLE, empEditEnable: 1, priorityRosterEnable: 0, autoGenRangeWeek: 4 },
-    { tenantId, schemeId: unrosterableScheme.id, empTypeCode: EMP_TYPE_CODES.PART_TIME, cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_UNROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_ROSTERABLE, empEditEnable: 1, priorityRosterEnable: 0, autoGenRangeWeek: 4 },
+    ...Object.values(EMP_TYPE_CODES).map((empTypeCode) => ({ tenantId, schemeId: rosterableScheme.id, empTypeCode, cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_ROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_UNROSTERABLE, empEditEnable: 1, priorityRosterEnable: 0, autoGenRangeWeek: 4 })),
+    ...Object.values(EMP_TYPE_CODES).map((empTypeCode) => ({ tenantId, schemeId: unrosterableScheme.id, empTypeCode, cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_UNROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_ROSTERABLE, empEditEnable: 1, priorityRosterEnable: 0, autoGenRangeWeek: 4 })),
   ] });
   await prisma.dtaOrg.update({ where: { id: org1.id }, data: { paramSchemeId: rosterableScheme.id } });
   await prisma.dtaOrg.update({ where: { id: org2.id }, data: { paramSchemeId: unrosterableScheme.id } });
   await prisma.dtaParamSchemeAuthorization.createMany({ data: [
     { tenantId, schemeId: rosterableScheme.id, orgId: org1.id, empTypeCode: EMP_TYPE_CODES.FULL_TIME, includeChildren: 0, ...by },
-    { tenantId, schemeId: unrosterableScheme.id, orgId: org2.id, empTypeCode: EMP_TYPE_CODES.PART_TIME, includeChildren: 0, ...by },
+    { tenantId, schemeId: unrosterableScheme.id, orgId: org2.id, empTypeCode: EMP_TYPE_CODES.CONTRACT_PT, includeChildren: 0, ...by },
+    { tenantId, schemeId: unrosterableScheme.id, orgId: org2.id, empTypeCode: EMP_TYPE_CODES.CASUAL_PT, includeChildren: 0, ...by },
   ] });
 
-  // 生效参数组：全职默认可排、只报不可排；兼职默认不可排、只报可排
+  // 生效参数组：Full Time 默认可排；两类 PT 默认不可排。
   for (const orgId of [org1.id, org2.id]) {
     await prisma.dtaParamGroup.create({
       data: {
@@ -130,14 +129,16 @@ async function main() {
         conflictCheckMode: DtaConflictCheckMode.STRONG_BLOCK, ...by,
       },
     });
-    await prisma.dtaParamGroup.create({
-      data: {
-        tenantId, orgId, empTypeCode: EMP_TYPE_CODES.PART_TIME,
-        cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_UNROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_ROSTERABLE,
-        empEditEnable: 1, priorityRosterEnable: 0, templateAutoGenEnable: 0, autoGenRangeWeek: 4, autoGenWeekday: null, autoGenTime: null,
-        conflictCheckMode: DtaConflictCheckMode.STRONG_BLOCK, ...by,
-      },
-    });
+    for (const empTypeCode of [EMP_TYPE_CODES.CONTRACT_PT, EMP_TYPE_CODES.CASUAL_PT]) {
+      await prisma.dtaParamGroup.create({
+        data: {
+          tenantId, orgId, empTypeCode,
+          cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_UNROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_ROSTERABLE,
+          empEditEnable: 1, priorityRosterEnable: 0, templateAutoGenEnable: 0, autoGenRangeWeek: 4, autoGenWeekday: null, autoGenTime: null,
+          conflictCheckMode: DtaConflictCheckMode.STRONG_BLOCK, ...by,
+        },
+      });
+    }
   }
 
   // 模拟班次：日期相对香港今日计算，覆盖锁定期内、锁定期外、跨午夜与 0 时长场景

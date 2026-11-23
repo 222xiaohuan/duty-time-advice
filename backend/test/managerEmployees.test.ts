@@ -15,7 +15,7 @@ beforeAll(async () => {
   }
   await prisma.dtaEmployee.createMany({ data: [
     { id: 701, tenantId: 1, orgId: 1, empName: "T010 A", empTypeCode: "T010C_ROSTERABLE", postCode: "BETTING_SERVICE", ...by },
-    { id: 702, tenantId: 1, orgId: 2, empName: "T010 B", empTypeCode: "PART_TIME", postCode: "CUSTOMER_SERVICE", ...by },
+    { id: 702, tenantId: 1, orgId: 2, empName: "T010 B", empTypeCode: "CONTRACT_PT", postCode: "CUSTOMER_SERVICE", ...by },
     { id: 703, tenantId: 1, orgId: 1, empName: "T010 C", empTypeCode: "T010C_UNROSTERABLE", postCode: "CUSTOMER_SERVICE", ...by },
   ] });
   await prisma.dtaParamGroup.createMany({ data: [

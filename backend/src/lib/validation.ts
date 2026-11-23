@@ -84,5 +84,5 @@ export function baselineStatusMessage(baselineRule: DtaBaselineRule, statusCode:
 }
 
 export function isEmployeeType(value: unknown): value is string {
-  return value === EMP_TYPE_CODES.FULL_TIME || value === EMP_TYPE_CODES.PART_TIME;
+  return Object.values(EMP_TYPE_CODES).some((code) => code === value);
 }
