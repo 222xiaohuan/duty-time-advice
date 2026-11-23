@@ -209,24 +209,50 @@ paramSchemesRouter.post("/:id/authorize", requireRole("admin"), async (req, res,
     const rootOrgIds = [...new Set(orgIdsValue.map((value) => parseId(value, "orgId")))];
     const empTypeCodes = parseEmpTypes(body.empTypeCodes);
     const includeChildren = parseFlag(body.includeChildren, "includeChildren", 0);
-    const [scheme, rules, orgs, previousAuthorizations] = await Promise.all([
+    const [scheme, rules, orgs, allAuthorizations] = await Promise.all([
       prisma.dtaParamScheme.findFirst({ where: { id: schemeId, tenantId: TENANT_ID, isDeleted: 0 } }),
       prisma.dtaParamSchemeRule.findMany({ where: { tenantId: TENANT_ID, schemeId }, orderBy: { empTypeCode: "asc" } }),
       prisma.dtaOrg.findMany({ where: { tenantId: TENANT_ID, id: { in: rootOrgIds }, isDeleted: 0 } }),
-      prisma.dtaParamSchemeAuthorization.findMany({ where: { tenantId: TENANT_ID, schemeId }, select: { orgId: true, empTypeCode: true, includeChildren: true } }),
+      prisma.dtaParamSchemeAuthorization.findMany({ where: { tenantId: TENANT_ID }, select: { schemeId: true, orgId: true, empTypeCode: true, includeChildren: true } }),
     ]);
     if (!scheme) throw new AppError(ErrorCode.NOT_FOUND, "参数模板不存在", 404);
     if (orgs.length !== rootOrgIds.length) bad("包含不存在的组织");
     const rule = genericRule(rules);
     if (!rule) bad("参数模板规则不完整");
     const targetOrgIds = includeChildren ? await descendants(rootOrgIds) : rootOrgIds;
-    const previousTargets = await authorizationTargets(previousAuthorizations);
     const selectedKeys = new Set(targetOrgIds.flatMap((orgId) => empTypeCodes.map((empTypeCode) => `${orgId}:${empTypeCode}`)));
+    const targetsByScheme = new Map<number, Awaited<ReturnType<typeof authorizationTargets>>>();
+    for (const existingSchemeId of new Set(allAuthorizations.map((row) => row.schemeId))) {
+      targetsByScheme.set(existingSchemeId, await authorizationTargets(allAuthorizations.filter((row) => row.schemeId === existingSchemeId)));
+    }
+    const previousTargets = targetsByScheme.get(schemeId) ?? [];
     const staleTargets = previousTargets.filter((item) => !selectedKeys.has(`${item.orgId}:${item.empTypeCode}`));
+    // A grant with children has no exclusion field; split only grants that lose part of their scope.
+    const displaced = [...targetsByScheme.entries()].filter(([existingSchemeId, targets]) => existingSchemeId !== schemeId && targets.some((item) => selectedKeys.has(`${item.orgId}:${item.empTypeCode}`)));
+    const remainingDisplaced = [] as Array<{ tenantId: number; schemeId: number; orgId: number; empTypeCode: string; includeChildren: number; createdBy: number; updatedBy: number }>;
+    for (const [existingSchemeId, targets] of displaced) {
+      const rows = allAuthorizations.filter((row) => row.schemeId === existingSchemeId);
+      const preserved = [] as typeof rows;
+      for (const row of rows) {
+        if (!(await authorizationTargets([row])).some((item) => selectedKeys.has(`${item.orgId}:${item.empTypeCode}`))) preserved.push(row);
+      }
+      const preservedKeys = new Set((await authorizationTargets(preserved)).map((item) => `${item.orgId}:${item.empTypeCode}`));
+      remainingDisplaced.push(...preserved.map((row) => ({ ...row, tenantId: TENANT_ID, createdBy: req.identity!.userId, updatedBy: req.identity!.userId })));
+      remainingDisplaced.push(...targets.filter((item) => !selectedKeys.has(`${item.orgId}:${item.empTypeCode}`) && !preservedKeys.has(`${item.orgId}:${item.empTypeCode}`)).map((item) => ({ tenantId: TENANT_ID, schemeId: existingSchemeId, orgId: item.orgId, empTypeCode: item.empTypeCode, includeChildren: 0, createdBy: req.identity!.userId, updatedBy: req.identity!.userId })));
+    }
+    const owners = new Map<string, number>();
+    for (const [existingSchemeId, targets] of targetsByScheme) for (const item of targets) owners.set(`${item.orgId}:${item.empTypeCode}`, existingSchemeId);
+    for (const item of previousTargets) owners.delete(`${item.orgId}:${item.empTypeCode}`);
+    for (const key of selectedKeys) owners.set(key, schemeId);
+    const affectedOrgIds = [...new Set([...targetOrgIds, ...staleTargets.map((item) => item.orgId)])];
     await prisma.$transaction(async (tx) => {
+      if (displaced.length) {
+        await tx.dtaParamSchemeAuthorization.deleteMany({ where: { tenantId: TENANT_ID, schemeId: { in: displaced.map(([existingSchemeId]) => existingSchemeId) } } });
+        if (remainingDisplaced.length) await tx.dtaParamSchemeAuthorization.createMany({ data: remainingDisplaced });
+      }
       await tx.dtaParamSchemeAuthorization.deleteMany({ where: { tenantId: TENANT_ID, schemeId } });
       for (const stale of staleTargets) {
-        await tx.dtaParamGroup.updateMany({ where: { tenantId: TENANT_ID, orgId: stale.orgId, empTypeCode: stale.empTypeCode, isDeleted: 0 }, data: { isDeleted: 1, updatedBy: req.identity!.userId } });
+        if (!owners.has(`${stale.orgId}:${stale.empTypeCode}`)) await tx.dtaParamGroup.updateMany({ where: { tenantId: TENANT_ID, orgId: stale.orgId, empTypeCode: stale.empTypeCode, isDeleted: 0 }, data: { isDeleted: 1, updatedBy: req.identity!.userId } });
       }
       for (const orgId of targetOrgIds) {
         for (const empTypeCode of empTypeCodes) {
@@ -241,7 +267,10 @@ paramSchemesRouter.post("/:id/authorize", requireRole("admin"), async (req, res,
       for (const orgId of rootOrgIds) for (const empTypeCode of empTypeCodes) {
         await tx.dtaParamSchemeAuthorization.create({ data: { tenantId: TENANT_ID, schemeId, orgId, empTypeCode, includeChildren, createdBy: req.identity!.userId, updatedBy: req.identity!.userId } });
       }
-      await tx.dtaOrg.updateMany({ where: { tenantId: TENANT_ID, id: { in: targetOrgIds } }, data: { paramSchemeId: empTypeCodes.length === Object.values(EMP_TYPE_CODES).length ? schemeId : null, updatedBy: req.identity!.userId } });
+      for (const orgId of affectedOrgIds) {
+        const assigned = Object.values(EMP_TYPE_CODES).map((empTypeCode) => owners.get(`${orgId}:${empTypeCode}`));
+        await tx.dtaOrg.update({ where: { id: orgId }, data: { paramSchemeId: assigned.every((owner) => owner && owner === assigned[0]) ? assigned[0] : null, updatedBy: req.identity!.userId } });
+      }
     });
     ok(res, { schemeId, rootOrgIds, targetOrgIds, empTypeCodes, includeChildren }, "参数模板授权已保存");
   } catch (error) { next(error); }
