@@ -115,7 +115,7 @@ describe("组织与员工类型参数方案", () => {
     expect((await request(app).delete(`/api/param-schemes/${scheme.id}`).set(admin)).status).toBe(200);
   });
 
-  it("跨模板更换员工类型时接管目标授权并保留原模板其余子组织", async () => {
+  it("跨模板授权冲突时拒绝保存，包含子组织也按实际覆盖范围校验", async () => {
     await prisma.dtaOrg.createMany({ data: [
       { id: 44, tenantId: 1, orgName: "Authorization root", ...by },
       { id: 45, tenantId: 1, orgName: "Authorization child", parentOrgId: 44, ...by },
@@ -133,22 +133,26 @@ describe("组织与员工类型参数方案", () => {
     expect((await request(app).post(`/api/param-schemes/${replacementId}/authorize`).set(admin).send({ orgIds: [45], empTypeCodes: ["FULL_TIME"], includeChildren: 0 })).status).toBe(200);
 
     const moved = await request(app).post(`/api/param-schemes/${replacementId}/authorize`).set(admin).send({ orgIds: [45], empTypeCodes: ["CONTRACT_PT"], includeChildren: 0 });
-    expect(moved.status).toBe(200);
+    expect(moved.status).toBe(400);
+    expect(moved.body.msg).toContain("Authorization child");
+    expect(moved.body.msg).toContain("Contract PT");
+    expect(moved.body.msg).toContain("原授权模板");
     expect(await prisma.dtaParamSchemeAuthorization.findMany({ where: { tenantId: 1, schemeId: originalId }, select: { orgId: true, empTypeCode: true, includeChildren: true }, orderBy: [{ orgId: "asc" }, { empTypeCode: "asc" }] })).toEqual([
       { orgId: 44, empTypeCode: "CASUAL_PT", includeChildren: 1 },
-      { orgId: 44, empTypeCode: "CONTRACT_PT", includeChildren: 0 },
-      { orgId: 46, empTypeCode: "CONTRACT_PT", includeChildren: 0 },
+      { orgId: 44, empTypeCode: "CONTRACT_PT", includeChildren: 1 },
     ]);
-    expect(await prisma.dtaParamSchemeAuthorization.findMany({ where: { tenantId: 1, schemeId: replacementId }, select: { orgId: true, empTypeCode: true } })).toEqual([{ orgId: 45, empTypeCode: "CONTRACT_PT" }]);
-    expect((await prisma.dtaParamGroup.findUniqueOrThrow({ where: { tenantId_orgId_empTypeCode: { tenantId: 1, orgId: 45, empTypeCode: "CONTRACT_PT" } } })).cutoffDays).toBe(1);
+    expect(await prisma.dtaParamSchemeAuthorization.findMany({ where: { tenantId: 1, schemeId: replacementId }, select: { orgId: true, empTypeCode: true } })).toEqual([{ orgId: 45, empTypeCode: "FULL_TIME" }]);
+    expect((await prisma.dtaParamGroup.findUniqueOrThrow({ where: { tenantId_orgId_empTypeCode: { tenantId: 1, orgId: 45, empTypeCode: "CONTRACT_PT" } } })).cutoffDays).toBe(5);
     expect((await prisma.dtaParamGroup.findUniqueOrThrow({ where: { tenantId_orgId_empTypeCode: { tenantId: 1, orgId: 46, empTypeCode: "CONTRACT_PT" } } })).cutoffDays).toBe(5);
     expect((await request(app).post(`/api/param-schemes/${replacementId}/authorize`).set(admin).send({ orgIds: [999], empTypeCodes: ["CONTRACT_PT"], includeChildren: 0 })).status).toBe(400);
-    expect(await prisma.dtaParamSchemeAuthorization.count({ where: { tenantId: 1, schemeId: replacementId, orgId: 45, empTypeCode: "CONTRACT_PT" } })).toBe(1);
+    expect(await prisma.dtaParamSchemeAuthorization.count({ where: { tenantId: 1, schemeId: replacementId, orgId: 45, empTypeCode: "FULL_TIME" } })).toBe(1);
 
     const reassigned = await request(app).post(`/api/param-schemes/${replacementId}/authorize`).set(admin).send({ orgIds: [44], empTypeCodes: ["CONTRACT_PT"], includeChildren: 1 });
-    expect(reassigned.status).toBe(200);
-    expect(await prisma.dtaParamSchemeAuthorization.count({ where: { tenantId: 1, schemeId: originalId, empTypeCode: "CONTRACT_PT" } })).toBe(0);
+    expect(reassigned.status).toBe(400);
+    expect(await prisma.dtaParamSchemeAuthorization.count({ where: { tenantId: 1, schemeId: originalId, empTypeCode: "CONTRACT_PT" } })).toBe(1);
     expect(await prisma.dtaParamSchemeAuthorization.count({ where: { tenantId: 1, schemeId: originalId, empTypeCode: "CASUAL_PT", includeChildren: 1 } })).toBe(1);
+    expect((await request(app).post(`/api/param-schemes/${originalId}/authorize`).set(admin).send({ orgIds: [44], empTypeCodes: ["CASUAL_PT"], includeChildren: 1 })).status).toBe(200);
+    expect((await request(app).post(`/api/param-schemes/${replacementId}/authorize`).set(admin).send({ orgIds: [44], empTypeCodes: ["CONTRACT_PT"], includeChildren: 1 })).status).toBe(200);
     expect((await prisma.dtaParamGroup.findUniqueOrThrow({ where: { tenantId_orgId_empTypeCode: { tenantId: 1, orgId: 46, empTypeCode: "CONTRACT_PT" } } })).cutoffDays).toBe(1);
   });
 

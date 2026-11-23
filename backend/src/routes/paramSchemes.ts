@@ -227,18 +227,16 @@ paramSchemesRouter.post("/:id/authorize", requireRole("admin"), async (req, res,
     }
     const previousTargets = targetsByScheme.get(schemeId) ?? [];
     const staleTargets = previousTargets.filter((item) => !selectedKeys.has(`${item.orgId}:${item.empTypeCode}`));
-    // A grant with children has no exclusion field; split only grants that lose part of their scope.
-    const displaced = [...targetsByScheme.entries()].filter(([existingSchemeId, targets]) => existingSchemeId !== schemeId && targets.some((item) => selectedKeys.has(`${item.orgId}:${item.empTypeCode}`)));
-    const remainingDisplaced = [] as Array<{ tenantId: number; schemeId: number; orgId: number; empTypeCode: string; includeChildren: number; createdBy: number; updatedBy: number }>;
-    for (const [existingSchemeId, targets] of displaced) {
-      const rows = allAuthorizations.filter((row) => row.schemeId === existingSchemeId);
-      const preserved = [] as typeof rows;
-      for (const row of rows) {
-        if (!(await authorizationTargets([row])).some((item) => selectedKeys.has(`${item.orgId}:${item.empTypeCode}`))) preserved.push(row);
-      }
-      const preservedKeys = new Set((await authorizationTargets(preserved)).map((item) => `${item.orgId}:${item.empTypeCode}`));
-      remainingDisplaced.push(...preserved.map((row) => ({ ...row, tenantId: TENANT_ID, createdBy: req.identity!.userId, updatedBy: req.identity!.userId })));
-      remainingDisplaced.push(...targets.filter((item) => !selectedKeys.has(`${item.orgId}:${item.empTypeCode}`) && !preservedKeys.has(`${item.orgId}:${item.empTypeCode}`)).map((item) => ({ tenantId: TENANT_ID, schemeId: existingSchemeId, orgId: item.orgId, empTypeCode: item.empTypeCode, includeChildren: 0, createdBy: req.identity!.userId, updatedBy: req.identity!.userId })));
+    const conflict = [...targetsByScheme.entries()].filter(([existingSchemeId]) => existingSchemeId !== schemeId)
+      .flatMap(([existingSchemeId, targets]) => targets.map((item) => ({ ...item, schemeId: existingSchemeId })))
+      .find((item) => selectedKeys.has(`${item.orgId}:${item.empTypeCode}`));
+    if (conflict) {
+      const [conflictOrg, conflictScheme] = await Promise.all([
+        prisma.dtaOrg.findUnique({ where: { id: conflict.orgId }, select: { orgName: true } }),
+        prisma.dtaParamScheme.findUnique({ where: { id: conflict.schemeId }, select: { schemeName: true } }),
+      ]);
+      const empTypeName = { FULL_TIME: "Full Time", CONTRACT_PT: "Contract PT", CASUAL_PT: "Casual PT" }[conflict.empTypeCode] ?? conflict.empTypeCode;
+      bad(`组织“${conflictOrg?.orgName ?? conflict.orgId}”的 ${empTypeName} 已绑定参数模板“${conflictScheme?.schemeName ?? conflict.schemeId}”，请先解除原授权`);
     }
     const owners = new Map<string, number>();
     for (const [existingSchemeId, targets] of targetsByScheme) for (const item of targets) owners.set(`${item.orgId}:${item.empTypeCode}`, existingSchemeId);
@@ -246,10 +244,6 @@ paramSchemesRouter.post("/:id/authorize", requireRole("admin"), async (req, res,
     for (const key of selectedKeys) owners.set(key, schemeId);
     const affectedOrgIds = [...new Set([...targetOrgIds, ...staleTargets.map((item) => item.orgId)])];
     await prisma.$transaction(async (tx) => {
-      if (displaced.length) {
-        await tx.dtaParamSchemeAuthorization.deleteMany({ where: { tenantId: TENANT_ID, schemeId: { in: displaced.map(([existingSchemeId]) => existingSchemeId) } } });
-        if (remainingDisplaced.length) await tx.dtaParamSchemeAuthorization.createMany({ data: remainingDisplaced });
-      }
       await tx.dtaParamSchemeAuthorization.deleteMany({ where: { tenantId: TENANT_ID, schemeId } });
       for (const stale of staleTargets) {
         if (!owners.has(`${stale.orgId}:${stale.empTypeCode}`)) await tx.dtaParamGroup.updateMany({ where: { tenantId: TENANT_ID, orgId: stale.orgId, empTypeCode: stale.empTypeCode, isDeleted: 0 }, data: { isDeleted: 1, updatedBy: req.identity!.userId } });
