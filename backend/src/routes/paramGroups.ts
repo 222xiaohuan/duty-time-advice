@@ -40,6 +40,10 @@ async function ensureOrg(orgId: number): Promise<void> {
   if (!org) throw new AppError(40400, "组织不存在", 404);
 }
 
+async function clearSchemeAuthorization(orgId: number, empTypeCode: string): Promise<void> {
+  await prisma.dtaParamSchemeAuthorization.deleteMany({ where: { tenantId: TENANT_ID, orgId, empTypeCode } });
+}
+
 paramGroupsRouter.get("/", requireRole("admin"), async (req, res, next) => {
   try {
     const where = { tenantId: TENANT_ID, isDeleted: 0, ...(req.query.orgId ? { orgId: parseId(req.query.orgId, "orgId") } : {}), ...(req.query.empTypeCode ? { empTypeCode: String(req.query.empTypeCode) } : {}) };
@@ -64,11 +68,13 @@ paramGroupsRouter.post("/", requireRole("admin"), async (req, res, next) => {
     if (existing) {
       const restored = await prisma.dtaParamGroup.update({ where: { id: existing.id }, data: { ...values, isDeleted: 0, updatedBy: req.identity!.userId } });
       await prisma.dtaOrg.update({ where: { id: values.orgId }, data: { paramSchemeId: null } });
+      await clearSchemeAuthorization(values.orgId, values.empTypeCode);
       ok(res, restored, "参数组已恢复并更新");
       return;
     }
     const created = await prisma.dtaParamGroup.create({ data });
     await prisma.dtaOrg.update({ where: { id: values.orgId }, data: { paramSchemeId: null } });
+    await clearSchemeAuthorization(values.orgId, values.empTypeCode);
     ok(res, created, "参数组已创建");
   } catch (error) { next(error); }
 });
@@ -85,6 +91,8 @@ paramGroupsRouter.patch("/:id", requireRole("admin"), async (req, res, next) => 
     const updated = await prisma.dtaParamGroup.update({ where: { id }, data: { ...values, updatedBy: req.identity!.userId } });
     await prisma.dtaOrg.update({ where: { id: current.orgId }, data: { paramSchemeId: null } });
     if (values.orgId !== current.orgId) await prisma.dtaOrg.update({ where: { id: values.orgId }, data: { paramSchemeId: null } });
+    await clearSchemeAuthorization(current.orgId, current.empTypeCode);
+    await clearSchemeAuthorization(values.orgId, values.empTypeCode);
     ok(res, updated, "参数组已更新");
   } catch (error) { next(error); }
 });
@@ -96,6 +104,7 @@ paramGroupsRouter.delete("/:id", requireRole("admin"), async (req, res, next) =>
     if (!current) throw new AppError(40400, "参数组不存在", 404);
     const deleted = await prisma.dtaParamGroup.update({ where: { id }, data: { isDeleted: 1, updatedBy: req.identity!.userId } });
     await prisma.dtaOrg.update({ where: { id: current.orgId }, data: { paramSchemeId: null } });
+    await clearSchemeAuthorization(current.orgId, current.empTypeCode);
     ok(res, deleted, "参数组已删除");
   } catch (error) { next(error); }
 });

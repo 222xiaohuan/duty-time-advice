@@ -30,16 +30,77 @@ function parseRules(value: unknown) {
   return rules;
 }
 
+function parseGenericRule(value: unknown) {
+  if (!value || typeof value !== "object") bad("参数模板规则格式错误");
+  const row = value as Record<string, unknown>;
+  const rule = {
+    cutoffDays: row.cutoffDays,
+    baselineRule: parseEnum(row.baselineRule, Object.values(DtaBaselineRule), "baselineRule"),
+    submitMode: parseEnum(row.submitMode, Object.values(DtaSubmitMode), "submitMode"),
+    empEditEnable: parseFlag(row.empEditEnable, "empEditEnable"),
+    priorityRosterEnable: parseFlag(row.priorityRosterEnable, "priorityRosterEnable"),
+    autoGenRangeWeek: row.autoGenRangeWeek,
+  };
+  validateParamValues({ ...rule, templateAutoGenEnable: 0, autoGenWeekday: null, autoGenTime: null, conflictCheckMode: DtaConflictCheckMode.STRONG_BLOCK });
+  return { ...rule, cutoffDays: Number(rule.cutoffDays), autoGenRangeWeek: Number(rule.autoGenRangeWeek) };
+}
+
+function parseSchemeRules(body: Record<string, unknown>) {
+  if (body.rule !== undefined) {
+    const generic = parseGenericRule(body.rule);
+    return Object.values(EMP_TYPE_CODES).map((empTypeCode) => ({ empTypeCode, ...generic }));
+  }
+  return parseRules(body.rules);
+}
+
+function genericRule(rules: Array<{ empTypeCode: string; cutoffDays: number; baselineRule: DtaBaselineRule; submitMode: DtaSubmitMode; empEditEnable: number; priorityRosterEnable: number; autoGenRangeWeek: number }>) {
+  const rule = rules.find((item) => item.empTypeCode === EMP_TYPE_CODES.FULL_TIME) ?? rules[0];
+  if (!rule) return null;
+  return { cutoffDays: rule.cutoffDays, baselineRule: rule.baselineRule, submitMode: rule.submitMode, empEditEnable: rule.empEditEnable, priorityRosterEnable: rule.priorityRosterEnable, autoGenRangeWeek: rule.autoGenRangeWeek };
+}
+
+function parseEmpTypes(value: unknown) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > Object.values(EMP_TYPE_CODES).length) bad("请选择至少一种员工类型");
+  const empTypes = value.map((item) => String(item));
+  if (new Set(empTypes).size !== empTypes.length || empTypes.some((item) => !Object.values(EMP_TYPE_CODES).includes(item as typeof EMP_TYPE_CODES[keyof typeof EMP_TYPE_CODES]))) bad("员工类型编码无效");
+  return empTypes;
+}
+
+async function descendants(orgIds: number[]) {
+  const all = await prisma.dtaOrg.findMany({ where: { tenantId: TENANT_ID, isDeleted: 0 }, select: { id: true, parentOrgId: true } });
+  const children = new Map<number, number[]>();
+  for (const row of all) children.set(row.parentOrgId ?? 0, [...(children.get(row.parentOrgId ?? 0) ?? []), row.id]);
+  const result = new Set(orgIds);
+  const queue = [...orgIds];
+  while (queue.length) {
+    const next = queue.shift()!;
+    for (const child of children.get(next) ?? []) if (!result.has(child)) { result.add(child); queue.push(child); }
+  }
+  return [...result];
+}
+
+async function authorizationTargets(rows: Array<{ orgId: number; empTypeCode: string; includeChildren: number }>) {
+  const targets = new Map<string, { orgId: number; empTypeCode: string }>();
+  for (const row of rows) {
+    const orgIds = row.includeChildren ? await descendants([row.orgId]) : [row.orgId];
+    for (const orgId of orgIds) targets.set(`${orgId}:${row.empTypeCode}`, { orgId, empTypeCode: row.empTypeCode });
+  }
+  return [...targets.values()];
+}
+
 paramSchemesRouter.get("/", requireRole("admin"), async (_req, res, next) => {
   try {
-    const [schemes, rules, orgs] = await Promise.all([
-      prisma.dtaParamScheme.findMany({ where: { tenantId: TENANT_ID }, orderBy: { id: "asc" } }),
-      prisma.dtaParamSchemeRule.findMany({ where: { tenantId: TENANT_ID }, orderBy: { empTypeCode: "asc" } }),
+    const [schemes, rules, orgs, authorizations] = await Promise.all([
+      prisma.dtaParamScheme.findMany({ where: { tenantId: TENANT_ID, isDeleted: 0 }, orderBy: { id: "asc" } }),
+      prisma.dtaParamSchemeRule.findMany({ where: { tenantId: TENANT_ID }, orderBy: [{ schemeId: "asc" }, { empTypeCode: "asc" }] }),
       prisma.dtaOrg.findMany({ where: { tenantId: TENANT_ID, isDeleted: 0 }, select: { id: true, paramSchemeId: true } }),
+      prisma.dtaParamSchemeAuthorization.findMany({ where: { tenantId: TENANT_ID }, orderBy: [{ schemeId: "asc" }, { orgId: "asc" }, { empTypeCode: "asc" }] }),
     ]);
     ok(res, schemes.map((scheme) => ({ ...scheme,
       rules: rules.filter((rule) => rule.schemeId === scheme.id),
-      assignedOrgIds: orgs.filter((org) => org.paramSchemeId === scheme.id).map((org) => org.id),
+      rule: genericRule(rules.filter((rule) => rule.schemeId === scheme.id)),
+      assignedOrgIds: [...new Set([...orgs.filter((org) => org.paramSchemeId === scheme.id).map((org) => org.id), ...authorizations.filter((row) => row.schemeId === scheme.id).map((row) => row.orgId)])],
+      authorizations: authorizations.filter((row) => row.schemeId === scheme.id),
     })));
   } catch (error) { next(error); }
 });
@@ -48,17 +109,60 @@ paramSchemesRouter.post("/", requireRole("admin"), async (req, res, next) => {
   try {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const schemeName = typeof body.schemeName === "string" ? body.schemeName.trim() : "";
+    const description = body.description == null ? null : typeof body.description === "string" ? body.description.trim() : "";
     if (!schemeName || schemeName.length > 80) bad("方案名称须为 1 至 80 个字符");
-    const rules = parseRules(body.rules);
+    if (description && description.length > 500) bad("方案描述不能超过 500 个字符");
+    const rules = parseSchemeRules(body);
     const sourceSchemeId = body.sourceSchemeId == null ? null : parseId(body.sourceSchemeId, "sourceSchemeId");
-    if (sourceSchemeId && !(await prisma.dtaParamScheme.findFirst({ where: { id: sourceSchemeId, tenantId: TENANT_ID } }))) bad("来源方案不存在");
-    if (await prisma.dtaParamScheme.findFirst({ where: { tenantId: TENANT_ID, schemeName } })) bad("方案名称已存在");
+    if (sourceSchemeId && !(await prisma.dtaParamScheme.findFirst({ where: { id: sourceSchemeId, tenantId: TENANT_ID, isDeleted: 0 } }))) bad("来源方案不存在");
+    if (await prisma.dtaParamScheme.findFirst({ where: { tenantId: TENANT_ID, schemeName, isDeleted: 0 } })) bad("方案名称已存在");
     const scheme = await prisma.$transaction(async (tx) => {
-      const created = await tx.dtaParamScheme.create({ data: { tenantId: TENANT_ID, schemeName, sourceSchemeId, createdBy: req.identity!.userId } });
+      const created = await tx.dtaParamScheme.create({ data: { tenantId: TENANT_ID, schemeName, description: description || null, sourceSchemeId, createdBy: req.identity!.userId } });
       await tx.dtaParamSchemeRule.createMany({ data: rules.map((rule) => ({ tenantId: TENANT_ID, schemeId: created.id, ...rule })) });
       return created;
     });
-    ok(res, { ...scheme, rules, assignedOrgIds: [] }, "参数方案已创建");
+    ok(res, { ...scheme, rules, rule: genericRule(rules), assignedOrgIds: [], authorizations: [] }, "参数方案已创建");
+  } catch (error) { next(error); }
+});
+
+paramSchemesRouter.patch("/:id", requireRole("admin"), async (req, res, next) => {
+  try {
+    const schemeId = parseId(req.params.id, "id");
+    const current = await prisma.dtaParamScheme.findFirst({ where: { id: schemeId, tenantId: TENANT_ID, isDeleted: 0 } });
+    if (!current) throw new AppError(ErrorCode.NOT_FOUND, "参数模板不存在", 404);
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const schemeName = body.schemeName === undefined ? current.schemeName : typeof body.schemeName === "string" ? body.schemeName.trim() : "";
+    const description = body.description === undefined ? current.description : body.description == null ? null : typeof body.description === "string" ? body.description.trim() : "";
+    if (!schemeName || schemeName.length > 80) bad("方案名称须为 1 至 80 个字符");
+    if (description && description.length > 500) bad("方案描述不能超过 500 个字符");
+    if (await prisma.dtaParamScheme.findFirst({ where: { tenantId: TENANT_ID, schemeName, isDeleted: 0, id: { not: schemeId } } })) bad("方案名称已存在");
+    const rules = body.rule === undefined && body.rules === undefined ? null : parseSchemeRules(body);
+    const updated = await prisma.$transaction(async (tx) => {
+      const row = await tx.dtaParamScheme.update({ where: { id: schemeId }, data: { schemeName, description: description || null } });
+      if (rules) {
+        for (const rule of rules) await tx.dtaParamSchemeRule.upsert({ where: { schemeId_empTypeCode: { schemeId, empTypeCode: rule.empTypeCode } }, create: { tenantId: TENANT_ID, schemeId, ...rule }, update: rule });
+      }
+      return row;
+    });
+    const nextRules = rules ?? await prisma.dtaParamSchemeRule.findMany({ where: { tenantId: TENANT_ID, schemeId } });
+    const assignedOrgIds = (await prisma.dtaOrg.findMany({ where: { tenantId: TENANT_ID, paramSchemeId: schemeId, isDeleted: 0 }, select: { id: true } })).map((row) => row.id);
+    const authorizationRows = await prisma.dtaParamSchemeAuthorization.findMany({ where: { tenantId: TENANT_ID, schemeId } });
+    ok(res, { ...updated, rules: nextRules, rule: genericRule(nextRules), assignedOrgIds: [...new Set([...assignedOrgIds, ...authorizationRows.map((row) => row.orgId)])], authorizations: authorizationRows }, "参数模板已更新");
+  } catch (error) { next(error); }
+});
+
+paramSchemesRouter.delete("/:id", requireRole("admin"), async (req, res, next) => {
+  try {
+    const schemeId = parseId(req.params.id, "id");
+    const scheme = await prisma.dtaParamScheme.findFirst({ where: { id: schemeId, tenantId: TENANT_ID, isDeleted: 0 } });
+    if (!scheme) throw new AppError(ErrorCode.NOT_FOUND, "参数模板不存在", 404);
+    const assigned = await prisma.dtaOrg.count({ where: { tenantId: TENANT_ID, paramSchemeId: schemeId, isDeleted: 0 } }) + await prisma.dtaParamSchemeAuthorization.count({ where: { tenantId: TENANT_ID, schemeId } });
+    if (assigned > 0) bad("该参数模板已授权组织，请先解除组织授权后再删除");
+    await prisma.$transaction(async (tx) => {
+      await tx.dtaParamSchemeRule.deleteMany({ where: { tenantId: TENANT_ID, schemeId } });
+      await tx.dtaParamScheme.update({ where: { id: schemeId }, data: { isDeleted: 1 } });
+    });
+    ok(res, { id: schemeId }, "参数模板已删除");
   } catch (error) { next(error); }
 });
 
@@ -70,7 +174,7 @@ paramSchemesRouter.post("/:id/assign", requireRole("admin"), async (req, res, ne
     const orgIds = orgIdsValue.map((value) => parseId(value, "orgId"));
     if (new Set(orgIds).size !== orgIds.length) bad("组织不能重复");
     const [scheme, rules, orgs] = await Promise.all([
-      prisma.dtaParamScheme.findFirst({ where: { id: schemeId, tenantId: TENANT_ID } }),
+      prisma.dtaParamScheme.findFirst({ where: { id: schemeId, tenantId: TENANT_ID, isDeleted: 0 } }),
       prisma.dtaParamSchemeRule.findMany({ where: { tenantId: TENANT_ID, schemeId } }),
       prisma.dtaOrg.findMany({ where: { tenantId: TENANT_ID, id: { in: orgIds }, isDeleted: 0 } }),
     ]);
@@ -93,5 +197,70 @@ paramSchemesRouter.post("/:id/assign", requireRole("admin"), async (req, res, ne
       }
     });
     ok(res, { schemeId, orgIds, updated: orgIds.length }, "参数方案已应用");
+  } catch (error) { next(error); }
+});
+
+paramSchemesRouter.post("/:id/authorize", requireRole("admin"), async (req, res, next) => {
+  try {
+    const schemeId = parseId(req.params.id, "id");
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const orgIdsValue = body.orgIds;
+    if (!Array.isArray(orgIdsValue) || orgIdsValue.length < 1 || orgIdsValue.length > 500) bad("请选择至少一个组织");
+    const rootOrgIds = [...new Set(orgIdsValue.map((value) => parseId(value, "orgId")))];
+    const empTypeCodes = parseEmpTypes(body.empTypeCodes);
+    const includeChildren = parseFlag(body.includeChildren, "includeChildren", 0);
+    const [scheme, rules, orgs, previousAuthorizations] = await Promise.all([
+      prisma.dtaParamScheme.findFirst({ where: { id: schemeId, tenantId: TENANT_ID, isDeleted: 0 } }),
+      prisma.dtaParamSchemeRule.findMany({ where: { tenantId: TENANT_ID, schemeId }, orderBy: { empTypeCode: "asc" } }),
+      prisma.dtaOrg.findMany({ where: { tenantId: TENANT_ID, id: { in: rootOrgIds }, isDeleted: 0 } }),
+      prisma.dtaParamSchemeAuthorization.findMany({ where: { tenantId: TENANT_ID, schemeId }, select: { orgId: true, empTypeCode: true, includeChildren: true } }),
+    ]);
+    if (!scheme) throw new AppError(ErrorCode.NOT_FOUND, "参数模板不存在", 404);
+    if (orgs.length !== rootOrgIds.length) bad("包含不存在的组织");
+    const rule = genericRule(rules);
+    if (!rule) bad("参数模板规则不完整");
+    const targetOrgIds = includeChildren ? await descendants(rootOrgIds) : rootOrgIds;
+    const previousTargets = await authorizationTargets(previousAuthorizations);
+    const selectedKeys = new Set(targetOrgIds.flatMap((orgId) => empTypeCodes.map((empTypeCode) => `${orgId}:${empTypeCode}`)));
+    const staleTargets = previousTargets.filter((item) => !selectedKeys.has(`${item.orgId}:${item.empTypeCode}`));
+    await prisma.$transaction(async (tx) => {
+      await tx.dtaParamSchemeAuthorization.deleteMany({ where: { tenantId: TENANT_ID, schemeId } });
+      for (const stale of staleTargets) {
+        await tx.dtaParamGroup.updateMany({ where: { tenantId: TENANT_ID, orgId: stale.orgId, empTypeCode: stale.empTypeCode, isDeleted: 0 }, data: { isDeleted: 1, updatedBy: req.identity!.userId } });
+      }
+      for (const orgId of targetOrgIds) {
+        for (const empTypeCode of empTypeCodes) {
+          const values = { cutoffDays: rule.cutoffDays, baselineRule: rule.baselineRule, submitMode: rule.submitMode,
+            empEditEnable: rule.empEditEnable, priorityRosterEnable: rule.priorityRosterEnable,
+            autoGenRangeWeek: rule.autoGenRangeWeek, templateAutoGenEnable: 0, autoGenWeekday: null,
+            autoGenTime: null, conflictCheckMode: DtaConflictCheckMode.STRONG_BLOCK,
+            fieldSiteEnable: 0, enableApproval: 0, specialTagDiffEnable: 0, isDeleted: 0, updatedBy: req.identity!.userId };
+          await tx.dtaParamGroup.upsert({ where: { tenantId_orgId_empTypeCode: { tenantId: TENANT_ID, orgId, empTypeCode } }, create: { tenantId: TENANT_ID, orgId, empTypeCode, ...values, createdBy: req.identity!.userId }, update: values });
+        }
+      }
+      for (const orgId of rootOrgIds) for (const empTypeCode of empTypeCodes) {
+        await tx.dtaParamSchemeAuthorization.create({ data: { tenantId: TENANT_ID, schemeId, orgId, empTypeCode, includeChildren, createdBy: req.identity!.userId, updatedBy: req.identity!.userId } });
+      }
+      await tx.dtaOrg.updateMany({ where: { tenantId: TENANT_ID, id: { in: targetOrgIds } }, data: { paramSchemeId: empTypeCodes.length === Object.values(EMP_TYPE_CODES).length ? schemeId : null, updatedBy: req.identity!.userId } });
+    });
+    ok(res, { schemeId, rootOrgIds, targetOrgIds, empTypeCodes, includeChildren }, "参数模板授权已保存");
+  } catch (error) { next(error); }
+});
+
+paramSchemesRouter.delete("/:id/authorize", requireRole("admin"), async (req, res, next) => {
+  try {
+    const schemeId = parseId(req.params.id, "id");
+    const scheme = await prisma.dtaParamScheme.findFirst({ where: { id: schemeId, tenantId: TENANT_ID, isDeleted: 0 } });
+    if (!scheme) throw new AppError(ErrorCode.NOT_FOUND, "参数模板不存在", 404);
+    const authorizations = await prisma.dtaParamSchemeAuthorization.findMany({ where: { tenantId: TENANT_ID, schemeId }, select: { orgId: true, empTypeCode: true, includeChildren: true } });
+    const targets = await authorizationTargets(authorizations);
+    await prisma.$transaction(async (tx) => {
+      await tx.dtaParamSchemeAuthorization.deleteMany({ where: { tenantId: TENANT_ID, schemeId } });
+      for (const target of targets) {
+        await tx.dtaParamGroup.updateMany({ where: { tenantId: TENANT_ID, orgId: target.orgId, empTypeCode: target.empTypeCode, isDeleted: 0 }, data: { isDeleted: 1, updatedBy: req.identity!.userId } });
+      }
+      await tx.dtaOrg.updateMany({ where: { tenantId: TENANT_ID, paramSchemeId: schemeId }, data: { paramSchemeId: null, updatedBy: req.identity!.userId } });
+    });
+    ok(res, { schemeId, removed: targets.length }, "参数模板授权已解除");
   } catch (error) { next(error); }
 });

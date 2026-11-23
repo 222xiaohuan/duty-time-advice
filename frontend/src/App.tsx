@@ -64,7 +64,7 @@ function App() {
   const activeStatuses = state.statuses.filter((item) => item.enabled === 1);
   const activeSources = state.sources.filter((item) => item.enabled === 1);
 
-  return <div className="app-shell">
+  return <div className={`app-shell ${profile.role === "employee" ? "employee-shell" : ""}`}>
     <header className="topbar">
       <div className="brand">
         <div className="brand-mark" aria-hidden="true"><CalendarDays size={19} strokeWidth={2.2} /></div>
@@ -102,7 +102,7 @@ function App() {
         {profile.role === "manager" && <nav className="admin-mobile-nav" aria-label="主管页面"><button className={view === "workspace" ? "selected" : ""} onClick={() => setView("workspace")}>可排性</button><button className={view === "schedule" ? "selected" : ""} onClick={() => setView("schedule")}>模拟排班</button><button className={view === "templates" ? "selected" : ""} onClick={() => setView("templates")}>周模板</button></nav>}
         <div className="breadcrumb">{profile.role === "admin" ? "管理设置" : "排班管理"} <span>/</span> {view === "parameters" ? "组织参数" : view === "templates" ? "周模板" : view === "schedule" ? "模拟排班" : "排班时间报备"}</div>
         <div className="page-heading">
-          <div><h1>{view === "parameters" ? "组织参数" : view === "templates" ? "周模板" : view === "schedule" ? "模拟排班" : "排班时间报备"}</h1><p>{view === "schedule" ? "主管排班" : view === "templates" ? "主管模板" : view === "workspace" ? "工作台" : "管理员设置"}</p></div>
+          <div><h1>{view === "parameters" ? "组织参数" : view === "templates" ? "周模板" : view === "schedule" ? "模拟排班" : profile.role === "employee" ? "排班时间报备（手机端）" : "排班时间报备"}</h1><p>{view === "schedule" ? "主管排班" : view === "templates" ? "主管模板" : view === "workspace" ? "工作台" : "管理员设置"}</p></div>
           <div className="heading-actions">
             <span className={`connection-state ${state.phase === "ready" ? "is-ready" : state.phase === "error" ? "is-error" : ""}`}>
               <span className="connection-dot" />

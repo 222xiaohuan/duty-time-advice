@@ -91,7 +91,8 @@
 | id | int | 主键自增 |
 | tenant_id | int | 租户 ID |
 | org_name | text(100) | 组织名称 |
-| param_scheme_id | int? | 当前应用的命名参数方案；人工直接维护参数组后置空 |
+| parent_org_id | int? | 父组织 ID；Demo 组织树包含根节点在内五层 |
+| param_scheme_id | int? | 当前兼容字段；模板授权以 `dta_param_scheme_authorization` 按组织和员工类型为准 |
 | is_deleted | int | 默认 0 |
 | created_at | datetime | 创建时间 |
 | updated_at | datetime | 更新时间 |
@@ -179,19 +180,38 @@ Demo 不增加班组、职级或自定义字段。
 
 唯一约束：`tenant_id + org_id + emp_type_code`。软删除后再创建相同组合时，服务层应恢复原记录而不是插入新记录。
 
-### 8.1 dta_param_scheme 命名参数方案
+### 8.1 dta_param_scheme 命名参数模板
 
 | 字段 | 类型 | 约束与说明 |
 | --- | --- | --- |
 | id | int | 主键自增 |
 | tenant_id | int | 租户 ID |
 | scheme_name | text | 租户内唯一，最长 80 字符 |
+| description | text? | 模板描述，最长 500 字符 |
 | source_scheme_id | int? | 复制来源，仅作来源提示，不参与运行时继承 |
-| created_at / created_by | datetime / int | 创建信息；方案创建后只读 |
+| is_deleted | int | 软删除标记，默认 0；列表和授权接口只返回 0 |
+| created_at / created_by | datetime / int | 创建信息 |
 
-### 8.2 dta_param_scheme_rule 方案员工类型规则
+参数模板由管理员在列表页通过弹框新增、编辑和复制，页面只维护一套通用规则。为兼容既有 Demo 数据，规则接口内部仍可按员工类型保存相同快照；运行时以授权时选中的员工类型为准。删除会软删除模板并删除其规则行；已有授权的模板不能删除，必须先解除授权。编辑会直接更新模板规则，已授权组织/员工类型不会自动回写，需重新授权后才会使用新规则；标准产品可在此基础上增加版本和预约生效。
 
-每个方案包含全部 Demo 员工类型，`scheme_id + emp_type_code` 唯一。规则字段为 `cutoff_days`、`baseline_rule`、`submit_mode`、`emp_edit_enable`、`priority_roster_enable` 与 `auto_gen_range_week`，约束与生效参数组相同。批量应用时在单个事务中写入目标组织对应的 `dta_param_group` 行，并更新组织的 `param_scheme_id`。Demo 立即生效；方案版本、预约生效与历史查询属于标准产品扩展。
+### 8.2 dta_param_scheme_rule 模板员工类型规则
+
+通用规则字段为 `cutoff_days`、`baseline_rule`、`submit_mode`、`emp_edit_enable`、`priority_roster_enable` 与 `auto_gen_range_week`，约束与生效参数组相同。授权时在单个事务中把通用规则写入选定组织及员工类型的 `dta_param_group` 行；`param_scheme_id` 仅为旧数据兼容字段。复制模板时复制当前规则快照；Demo 立即生效，模板版本、预约生效与历史查询属于标准产品扩展。
+
+### 8.3 dta_param_scheme_authorization 参数模板授权
+
+| 字段 | 类型 | 约束与说明 |
+| --- | --- | --- |
+| id | int | 主键自增 |
+| tenant_id | int | 租户 ID |
+| scheme_id | int | 参数模板 ID |
+| org_id | int | 授权选择的组织根节点 |
+| emp_type_code | text | 授权员工类型；同一租户、组织和员工类型只能有一条有效授权 |
+| include_children | int | 是否包含所选组织的全部子组织，默认 0 |
+| created_at / updated_at | datetime | 授权创建和更新时间 |
+| created_by / updated_by | int | 授权创建和更新人 |
+
+授权保存时，服务端展开组织树并将模板通用规则写入目标组织/员工类型参数组；授权表保留用户选择的根组织和“包含子组织”标记，便于页面展示和后续撤销。标准产品可继续扩展授权条件快照、有效期和授权历史。
 
 ## 9. dta_template 周期模板主表
 

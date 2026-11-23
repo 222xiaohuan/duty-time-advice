@@ -86,6 +86,7 @@ model DtaOrg {
   id         Int      @id @default(autoincrement())
   tenantId   Int      @map("tenant_id")
   orgName    String   @map("org_name")
+  parentOrgId Int?    @map("parent_org_id")
   paramSchemeId Int? @map("param_scheme_id") // 当前应用的参数方案
   isDeleted  Int      @default(0) @map("is_deleted")
   createdAt  DateTime @default(now()) @map("created_at")
@@ -94,6 +95,7 @@ model DtaOrg {
   updatedBy  Int      @map("updated_by")
 
   @@index([tenantId, isDeleted])
+  @@index([tenantId, parentOrgId, isDeleted])
   @@map("dta_org")
 }
 
@@ -188,11 +190,14 @@ model DtaParamScheme {
   id             Int      @id @default(autoincrement())
   tenantId       Int      @map("tenant_id")
   schemeName     String   @map("scheme_name")
+  description    String?
   sourceSchemeId Int?     @map("source_scheme_id")
+  isDeleted      Int      @default(0) @map("is_deleted")
   createdAt      DateTime @default(now()) @map("created_at")
   createdBy      Int      @map("created_by")
 
   @@unique([tenantId, schemeName])
+  @@index([tenantId, isDeleted])
   @@map("dta_param_scheme")
 }
 
@@ -210,6 +215,23 @@ model DtaParamSchemeRule {
 
   @@unique([schemeId, empTypeCode])
   @@map("dta_param_scheme_rule")
+}
+
+model DtaParamSchemeAuthorization {
+  id             Int      @id @default(autoincrement())
+  tenantId       Int      @map("tenant_id")
+  schemeId       Int      @map("scheme_id")
+  orgId          Int      @map("org_id")
+  empTypeCode    String   @map("emp_type_code")
+  includeChildren Int     @default(0) @map("include_children")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+  createdBy      Int      @map("created_by")
+  updatedBy      Int      @map("updated_by")
+
+  @@unique([tenantId, orgId, empTypeCode])
+  @@index([tenantId, schemeId])
+  @@map("dta_param_scheme_authorization")
 }
 
 // ===================== 周期模板 =====================

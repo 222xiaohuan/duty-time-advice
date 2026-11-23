@@ -37,11 +37,14 @@ describe("组织与员工类型参数方案", () => {
     expect((await request(app).post("/api/param-schemes").set(admin).send({ schemeName: "缺少兼职", rules: rules.slice(0, 1) })).status).toBe(400);
     expect((await request(app).post("/api/param-schemes").set(admin).send({ schemeName: "重复类型", rules: [rules[0], rules[0]] })).status).toBe(400);
     expect((await request(app).post("/api/param-schemes").set(admin).send({ schemeName: "非法模式", rules: [{ ...rules[0], submitMode: DtaSubmitMode.MODE_ONLY_ROSTERABLE }, rules[1]] })).status).toBe(400);
-    const created = await request(app).post("/api/param-schemes").set(admin).send({ schemeName: "标准方案", rules });
+    const created = await request(app).post("/api/param-schemes").set(admin).send({ schemeName: "标准方案", description: "基础员工报备规则", rules });
     expect(created.status).toBe(200);
     schemeId = created.body.data.id;
     expect((await request(app).post("/api/param-schemes").set(admin).send({ schemeName: "标准方案", rules })).status).toBe(400);
-    expect((await request(app).patch(`/api/param-schemes/${schemeId}`).set(admin).send({ schemeName: "改名" })).status).toBe(404);
+    const edited = await request(app).patch(`/api/param-schemes/${schemeId}`).set(admin).send({ schemeName: "改名", description: "更新后的说明", rules });
+    expect(edited.status).toBe(200);
+    expect(edited.body.data).toMatchObject({ schemeName: "改名", description: "更新后的说明" });
+    expect(edited.body.data.rules).toHaveLength(2);
   });
 
   it("批量应用原子更新两组织，优先排按员工类型生效", async () => {
@@ -51,7 +54,7 @@ describe("组织与员工类型参数方案", () => {
     const applied = await request(app).post(`/api/param-schemes/${schemeId}/assign`).set(admin).send({ orgIds: [41, 42] });
     expect(applied.body.data).toMatchObject({ updated: 2, orgIds: [41, 42] });
     expect((await prisma.dtaParamGroup.findMany({ where: { orgId: 41 }, orderBy: { empTypeCode: "asc" } })).map((row) => [row.empTypeCode, row.priorityRosterEnable, row.cutoffDays])).toEqual([["FULL_TIME", 1, 0], ["PART_TIME", 0, 3]]);
-    expect((await request(app).get("/api/orgs").set(admin)).body.data).toContainEqual(expect.objectContaining({ id: 41, paramSchemeId: schemeId, schemeName: "标准方案" }));
+    expect((await request(app).get("/api/orgs").set(admin)).body.data).toContainEqual(expect.objectContaining({ id: 41, paramSchemeId: schemeId, schemeName: "改名" }));
     expect((await request(app).get("/api/me/rosterability-config").set(fullTime)).body.data.allowedStatuses.map((row: { statusCode: string }) => row.statusCode)).toContain("PRIORITY_ROSTERABLE");
     expect((await request(app).get("/api/me/rosterability-config").set(partTime)).body.data.allowedStatuses.map((row: { statusCode: string }) => row.statusCode)).not.toContain("PRIORITY_ROSTERABLE");
     const body = { businessDate: "2099-04-01", statusCode: "PRIORITY_ROSTERABLE", startTime: "09:00", endTime: "12:00", endDayOffset: 0 };
@@ -73,6 +76,36 @@ describe("组织与员工类型参数方案", () => {
     expect((await prisma.dtaParamGroup.findUniqueOrThrow({ where: { tenantId_orgId_empTypeCode: { tenantId: 1, orgId: 41, empTypeCode: "PART_TIME" } } })).priorityRosterEnable).toBe(1);
     expect((await prisma.dtaParamGroup.findUniqueOrThrow({ where: { tenantId_orgId_empTypeCode: { tenantId: 1, orgId: 42, empTypeCode: "PART_TIME" } } })).priorityRosterEnable).toBe(0);
     expect((await request(app).get("/api/param-schemes").set(admin)).body.data.find((row: { id: number }) => row.id === schemeId).rules.find((rule: { empTypeCode: string }) => rule.empTypeCode === "PART_TIME").priorityRosterEnable).toBe(0);
+    expect((await request(app).delete(`/api/param-schemes/${schemeId}`).set(admin)).status).toBe(400);
+  });
+
+  it("通用模板在授权时按员工类型和子组织生效", async () => {
+    await prisma.dtaOrg.create({ data: { id: 43, tenantId: 1, orgName: "Scheme child", parentOrgId: 41, ...by } });
+    const genericRule = { cutoffDays: 7, baselineRule: DtaBaselineRule.BASE_UNROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_ROSTERABLE, empEditEnable: 1, priorityRosterEnable: 1, autoGenRangeWeek: 12 };
+    const created = await request(app).post("/api/param-schemes").set(admin).send({ schemeName: "授权通用模板", rule: genericRule });
+    expect(created.status).toBe(200);
+    expect(created.body.data.rule).toMatchObject(genericRule);
+    expect(created.body.data.rules).toHaveLength(2);
+    const authorized = await request(app).post(`/api/param-schemes/${created.body.data.id}/authorize`).set(admin).send({ orgIds: [41], empTypeCodes: ["PART_TIME"], includeChildren: 1 });
+    expect(authorized.status).toBe(200);
+    expect(authorized.body.data.targetOrgIds).toEqual(expect.arrayContaining([41, 43]));
+    expect((await prisma.dtaParamGroup.findUniqueOrThrow({ where: { tenantId_orgId_empTypeCode: { tenantId: 1, orgId: 43, empTypeCode: "PART_TIME" } } })).cutoffDays).toBe(7);
+    expect((await prisma.dtaParamGroup.findUniqueOrThrow({ where: { tenantId_orgId_empTypeCode: { tenantId: 1, orgId: 41, empTypeCode: "FULL_TIME" } } })).cutoffDays).toBe(0);
+    const listed = (await request(app).get("/api/param-schemes").set(admin)).body.data.find((row: { id: number }) => row.id === created.body.data.id);
+    expect(listed.authorizations).toContainEqual(expect.objectContaining({ orgId: 41, empTypeCode: "PART_TIME", includeChildren: 1 }));
+  });
+
+  it("重新授权完整替换旧范围，并支持解除后删除模板", async () => {
+    const scheme = (await request(app).get("/api/param-schemes").set(admin)).body.data.find((row: { schemeName: string }) => row.schemeName === "授权通用模板");
+    expect(scheme).toBeDefined();
+    const replaced = await request(app).post(`/api/param-schemes/${scheme.id}/authorize`).set(admin).send({ orgIds: [41], empTypeCodes: ["FULL_TIME"], includeChildren: 0 });
+    expect(replaced.status).toBe(200);
+    expect(await prisma.dtaParamSchemeAuthorization.findMany({ where: { schemeId: scheme.id }, select: { orgId: true, empTypeCode: true } })).toEqual([{ orgId: 41, empTypeCode: "FULL_TIME" }]);
+    expect((await prisma.dtaParamGroup.findUniqueOrThrow({ where: { tenantId_orgId_empTypeCode: { tenantId: 1, orgId: 43, empTypeCode: "PART_TIME" } } })).isDeleted).toBe(1);
+    const cleared = await request(app).delete(`/api/param-schemes/${scheme.id}/authorize`).set(admin);
+    expect(cleared.status).toBe(200);
+    expect(await prisma.dtaParamSchemeAuthorization.count({ where: { schemeId: scheme.id } })).toBe(0);
+    expect((await request(app).delete(`/api/param-schemes/${scheme.id}`).set(admin)).status).toBe(200);
   });
 
   it("直接维护生效参数会解除方案关联，组织列表仍显示真实规则", async () => {

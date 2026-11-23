@@ -1,6 +1,6 @@
 /**
  * Demo 种子数据（T001）。仅用于本地 SQLite，执行时清空 dta_ 表后重新写入。
- * 包含：租户、2 个有员工及参数的组织、8 个未配置组织、状态与来源字典、模拟班次。
+ * 包含：租户、13 个五层组织树节点、员工、状态与来源字典、通用参数模板、模拟班次。
  * 不包含：周期模板（T003/T012 补充）、日期标签、导入任务。
  */
 import { createPrismaClient } from "../src/lib/prisma";
@@ -31,6 +31,7 @@ async function main() {
     "dta_template_item",
     "dta_template",
     "dta_param_group",
+    "dta_param_scheme_authorization",
     "dta_param_scheme_rule",
     "dta_param_scheme",
     "dta_rosterability_source_dict",
@@ -44,17 +45,20 @@ async function main() {
 
   await prisma.dtaTenant.create({ data: { id: tenantId, tenantName: "HKJC Demo", ...by } });
 
-  const org1 = await prisma.dtaOrg.create({ data: { id: 1, tenantId, orgName: "沙田马场 · 投注服务部", ...by } });
-  const org2 = await prisma.dtaOrg.create({ data: { id: 2, tenantId, orgName: "跑马地马场 · 客户服务部", ...by } });
+  const rootOrg = await prisma.dtaOrg.create({ data: { id: 11, tenantId, orgName: "JC001 JC", ...by } });
+  const hkgOrg = await prisma.dtaOrg.create({ data: { id: 12, tenantId, orgName: "HKG Hong Kong", parentOrgId: rootOrg.id, ...by } });
+  const org1 = await prisma.dtaOrg.create({ data: { id: 1, tenantId, orgName: "沙田马场 · 投注服务部", parentOrgId: hkgOrg.id, ...by } });
+  const org2 = await prisma.dtaOrg.create({ data: { id: 2, tenantId, orgName: "跑马地马场 · 客户服务部", parentOrgId: hkgOrg.id, ...by } });
   await prisma.dtaOrg.createMany({ data: [
-    { id: 3, orgName: "沙田马场 · 客户服务部" },
-    { id: 4, orgName: "沙田马场 · 场地运营部" },
-    { id: 5, orgName: "沙田马场 · 人流管理部" },
-    { id: 6, orgName: "跑马地马场 · 投注服务部" },
-    { id: 7, orgName: "跑马地马场 · 场地运营部" },
-    { id: 8, orgName: "跑马地马场 · 人流管理部" },
-    { id: 9, orgName: "总部 · 客户支持部" },
-    { id: 10, orgName: "总部 · 活动协调部" },
+    { id: 3, orgName: "沙田马场 · 客户服务部", parentOrgId: org1.id },
+    { id: 4, orgName: "沙田马场 · 场地运营部", parentOrgId: org1.id },
+    { id: 5, orgName: "沙田马场 · 人流管理部", parentOrgId: org1.id },
+    { id: 6, orgName: "跑马地马场 · 投注服务部", parentOrgId: org2.id },
+    { id: 7, orgName: "跑马地马场 · 场地运营部", parentOrgId: org2.id },
+    { id: 8, orgName: "跑马地马场 · 人流管理部", parentOrgId: org2.id },
+    { id: 9, orgName: "总部 · 客户支持部", parentOrgId: hkgOrg.id },
+    { id: 10, orgName: "总部 · 活动协调部", parentOrgId: hkgOrg.id },
+    { id: 13, orgName: "BRCC Beas River Country Club · Outlet01", parentOrgId: 3 },
   ].map((org) => ({ ...org, tenantId, ...by })) });
 
   const employees = [
@@ -94,12 +98,20 @@ async function main() {
     ],
   });
 
-  const scheme = await prisma.dtaParamScheme.create({ data: { tenantId, schemeName: "常规报备方案", createdBy: ADMIN_USER_ID } });
+  const rosterableScheme = await prisma.dtaParamScheme.create({ data: { tenantId, schemeName: "常规报备模板", description: "默认可排，员工补充不可排时段", createdBy: ADMIN_USER_ID } });
+  const unrosterableScheme = await prisma.dtaParamScheme.create({ data: { tenantId, schemeName: "弹性报备模板", description: "默认不可排，员工补充可排时段", createdBy: ADMIN_USER_ID } });
   await prisma.dtaParamSchemeRule.createMany({ data: [
-    { tenantId, schemeId: scheme.id, empTypeCode: EMP_TYPE_CODES.FULL_TIME, cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_ROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_UNROSTERABLE, empEditEnable: 1, priorityRosterEnable: 0, autoGenRangeWeek: 4 },
-    { tenantId, schemeId: scheme.id, empTypeCode: EMP_TYPE_CODES.PART_TIME, cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_UNROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_ROSTERABLE, empEditEnable: 1, priorityRosterEnable: 0, autoGenRangeWeek: 4 },
+    { tenantId, schemeId: rosterableScheme.id, empTypeCode: EMP_TYPE_CODES.FULL_TIME, cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_ROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_UNROSTERABLE, empEditEnable: 1, priorityRosterEnable: 0, autoGenRangeWeek: 4 },
+    { tenantId, schemeId: rosterableScheme.id, empTypeCode: EMP_TYPE_CODES.PART_TIME, cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_ROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_UNROSTERABLE, empEditEnable: 1, priorityRosterEnable: 0, autoGenRangeWeek: 4 },
+    { tenantId, schemeId: unrosterableScheme.id, empTypeCode: EMP_TYPE_CODES.FULL_TIME, cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_UNROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_ROSTERABLE, empEditEnable: 1, priorityRosterEnable: 0, autoGenRangeWeek: 4 },
+    { tenantId, schemeId: unrosterableScheme.id, empTypeCode: EMP_TYPE_CODES.PART_TIME, cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_UNROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_ROSTERABLE, empEditEnable: 1, priorityRosterEnable: 0, autoGenRangeWeek: 4 },
   ] });
-  await prisma.dtaOrg.updateMany({ where: { id: { in: [org1.id, org2.id] } }, data: { paramSchemeId: scheme.id } });
+  await prisma.dtaOrg.update({ where: { id: org1.id }, data: { paramSchemeId: rosterableScheme.id } });
+  await prisma.dtaOrg.update({ where: { id: org2.id }, data: { paramSchemeId: unrosterableScheme.id } });
+  await prisma.dtaParamSchemeAuthorization.createMany({ data: [
+    { tenantId, schemeId: rosterableScheme.id, orgId: org1.id, empTypeCode: EMP_TYPE_CODES.FULL_TIME, includeChildren: 0, ...by },
+    { tenantId, schemeId: unrosterableScheme.id, orgId: org2.id, empTypeCode: EMP_TYPE_CODES.PART_TIME, includeChildren: 0, ...by },
+  ] });
 
   // 生效参数组：全职默认可排、只报不可排；兼职默认不可排、只报可排
   for (const orgId of [org1.id, org2.id]) {
