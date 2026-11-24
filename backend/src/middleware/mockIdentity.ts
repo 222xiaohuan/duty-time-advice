@@ -30,6 +30,7 @@ function parsePositiveInt(value: string | undefined): number | null {
 export const MANAGER_ROOT_ORG_IDS: Readonly<Record<number, readonly number[]>> = {
   [MANAGER_USER_IDS.org1]: [15],
   [MANAGER_USER_IDS.org2]: [20],
+  [MANAGER_USER_IDS.allOrgs]: [11],
 };
 
 /**

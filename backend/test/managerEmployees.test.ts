@@ -8,6 +8,7 @@ import { hkDateTime } from "../src/lib/time";
 const app = createApp();
 const manager1 = { "x-mock-role": "manager", "x-mock-user-id": "9101", "x-mock-org-id": "1" };
 const manager2 = { "x-mock-role": "manager", "x-mock-user-id": "9102", "x-mock-org-id": "2" };
+const managerAll = { "x-mock-role": "manager", "x-mock-user-id": "9103", "x-mock-org-id": "11" };
 const by = { createdBy: 9001, updatedBy: 9001 };
 
 beforeAll(async () => {
@@ -40,7 +41,7 @@ describe("T010 经理员工目录", () => {
     expect(first.status).toBe(200);
     expect(first.body.data.orgId).toBe(1);
     expect(first.body.data.organizations).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 15, parentOrgId: null }),
+      expect.objectContaining({ id: 15, parentOrgId: 11 }),
       expect.objectContaining({ id: 1, parentOrgId: 15 }),
       expect.objectContaining({ id: 31, parentOrgId: 1 }),
       expect.objectContaining({ id: 32, parentOrgId: 31 }),
@@ -61,7 +62,7 @@ describe("T010 经理员工目录", () => {
     expect(second.body.data.employees).toEqual(expect.arrayContaining([expect.objectContaining({ id: 702, cutoffDays: null, baselineRule: null })]));
     expect(second.body.data.employees.some((row: { id: number }) => row.id === 701)).toBe(false);
     expect(second.body.data.organizations).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 20, parentOrgId: null }),
+      expect.objectContaining({ id: 20, parentOrgId: 11 }),
       expect.objectContaining({ id: 2, parentOrgId: 20 }),
     ]));
     expect(second.body.data.organizations).toHaveLength(2);
@@ -75,6 +76,31 @@ describe("T010 经理员工目录", () => {
     expect((await request(app).get("/api/manager/employees").set({ ...manager2, "x-mock-org-id": "32" })).status).toBe(403);
     expect((await request(app).get("/api/manager/employees").set({ ...manager1, "x-mock-org-id": "20" })).status).toBe(403);
     expect((await request(app).get("/api/manager/employees").set({ ...manager2, "x-mock-org-id": "15" })).status).toBe(403);
+  });
+
+  it("全组织主管可查看根组织全部员工，并切换到两个 Outlet", async () => {
+    const all = await request(app).get("/api/manager/employees").set(managerAll);
+    expect(all.status).toBe(200);
+    expect(all.body.data.orgId).toBe(11);
+    expect(all.body.data.organizations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 11, parentOrgId: null }),
+      expect.objectContaining({ id: 15, parentOrgId: 11 }),
+      expect.objectContaining({ id: 20, parentOrgId: 11 }),
+    ]));
+    expect(all.body.data.employees).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 701, orgId: 1 }),
+      expect.objectContaining({ id: 702, orgId: 2 }),
+    ]));
+    const hvrc = await request(app).get("/api/manager/employees").set({ ...managerAll, "x-mock-org-id": "15" });
+    expect(hvrc.status).toBe(200);
+    expect(hvrc.body.data.employees.some((row: { id: number }) => row.id === 701)).toBe(true);
+    expect(hvrc.body.data.employees.some((row: { id: number }) => row.id === 702)).toBe(false);
+    const strc = await request(app).get("/api/manager/employees").set({ ...managerAll, "x-mock-org-id": "20" });
+    expect(strc.status).toBe(200);
+    expect(strc.body.data.employees.some((row: { id: number }) => row.id === 702)).toBe(true);
+    expect(strc.body.data.employees.some((row: { id: number }) => row.id === 701)).toBe(false);
+    expect((await request(app).get("/api/manager/employees").query({ orgIds: "15,20" }).set(managerAll)).status).toBe(200);
+    expect((await request(app).get("/api/manager/employees").set({ ...managerAll, "x-mock-org-id": "33" })).status).toBe(403);
   });
 
   it("可排性记录和模拟班次查询沿用当前组织选择并拒绝范围外组织", async () => {

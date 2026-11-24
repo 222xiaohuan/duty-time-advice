@@ -55,6 +55,14 @@ describe("Mock 身份中间件", () => {
       expect((await request(app).get("/api/me").set({ ...headers, "x-mock-org-id": String(otherOrgId) })).status).toBe(403);
     }
   });
+
+  it("全组织主管拥有组织树根及两个 Outlet", async () => {
+    const response = await request(app).get("/api/me")
+      .set({ "x-mock-role": "manager", "x-mock-user-id": "9103", "x-mock-org-id": "11" });
+    expect(response.status).toBe(200);
+    expect(response.body.data).toMatchObject({ role: "manager", userId: 9103, orgId: 11 });
+    expect(response.body.data.orgIds).toEqual(expect.arrayContaining([11, 15, 20]));
+  });
 });
 
 describe("统一错误结构", () => {

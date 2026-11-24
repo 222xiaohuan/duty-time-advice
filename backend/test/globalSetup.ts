@@ -16,8 +16,9 @@ export default async function setup() {
   try {
     await prisma.dtaTenant.create({ data: { id: 1, tenantName: "Test", ...by } });
     await prisma.dtaOrg.createMany({ data: [
-      { id: 15, tenantId: 1, orgName: "JC003001 HVRC Outlet01", ...by },
-      { id: 20, tenantId: 1, orgName: "JC003003 STRC Outlet01", ...by },
+      { id: 11, tenantId: 1, orgName: "JC001 JC", ...by },
+      { id: 15, tenantId: 1, orgName: "JC003001 HVRC Outlet01", parentOrgId: 11, ...by },
+      { id: 20, tenantId: 1, orgName: "JC003003 STRC Outlet01", parentOrgId: 11, ...by },
       { id: 1, tenantId: 1, orgName: "T010 org 1", parentOrgId: 15, ...by },
       { id: 2, tenantId: 1, orgName: "T010 org 2", parentOrgId: 20, ...by },
     ] });

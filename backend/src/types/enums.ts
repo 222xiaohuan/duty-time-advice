@@ -27,7 +27,7 @@ export type AuditTargetType = (typeof AUDIT_TARGET_TYPES)[number];
 export const DEMO_TENANT_ID = 1;
 export const SYSTEM_USER_ID = 9000;
 export const ADMIN_USER_ID = 9001;
-export const MANAGER_USER_IDS = { org1: 9101, org2: 9102 } as const;
+export const MANAGER_USER_IDS = { org1: 9101, org2: 9102, allOrgs: 9103 } as const;
 
 /** 员工类型编码（Demo 不建字典表，编码在此约定） */
 export const EMP_TYPE_CODES = { FULL_TIME: "FULL_TIME", CONTRACT_PT: "CONTRACT_PT", CASUAL_PT: "CASUAL_PT" } as const;
