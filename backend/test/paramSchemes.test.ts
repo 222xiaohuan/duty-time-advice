@@ -18,7 +18,7 @@ const rules = [
 ];
 
 beforeAll(async () => {
-  await prisma.dtaOrg.createMany({ data: [41, 42].map((id) => ({ id, tenantId: 1, orgName: `Scheme org ${id}`, ...by })) });
+  await prisma.dtaOrg.createMany({ data: [41, 42].map((id) => ({ id, tenantId: 1, orgName: `Scheme org ${id}`, parentOrgId: 15, ...by })) });
   await prisma.dtaEmployee.createMany({ data: [
     { id: 401, tenantId: 1, orgId: 41, empName: "Scheme full time", empTypeCode: "FULL_TIME", postCode: "TEST", ...by },
     { id: 402, tenantId: 1, orgId: 41, empName: "Scheme contract PT", empTypeCode: "CONTRACT_PT", postCode: "TEST", ...by },

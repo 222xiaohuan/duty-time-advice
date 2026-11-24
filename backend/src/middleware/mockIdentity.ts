@@ -28,8 +28,8 @@ function parsePositiveInt(value: string | undefined): number | null {
 
 /** Demo 主管权限范围。标准产品由实际权限模型替换；请求中的 orgId 只是当前选择。 */
 export const MANAGER_ROOT_ORG_IDS: Readonly<Record<number, readonly number[]>> = {
-  [MANAGER_USER_IDS.org1]: [1, 2],
-  [MANAGER_USER_IDS.org2]: [2],
+  [MANAGER_USER_IDS.org1]: [15],
+  [MANAGER_USER_IDS.org2]: [20],
 };
 
 /**

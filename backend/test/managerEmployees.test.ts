@@ -40,11 +40,12 @@ describe("T010 经理员工目录", () => {
     expect(first.status).toBe(200);
     expect(first.body.data.orgId).toBe(1);
     expect(first.body.data.organizations).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: 1, parentOrgId: null }),
-      expect.objectContaining({ id: 2, parentOrgId: null }),
+      expect.objectContaining({ id: 15, parentOrgId: null }),
+      expect.objectContaining({ id: 1, parentOrgId: 15 }),
       expect.objectContaining({ id: 31, parentOrgId: 1 }),
       expect.objectContaining({ id: 32, parentOrgId: 31 }),
     ]));
+    expect(first.body.data.organizations.some((org: { id: number }) => org.id === 2 || org.id === 20)).toBe(false);
     expect(first.body.data.organizations.some((org: { id: number }) => org.id === 33)).toBe(false);
     expect(first.body.data.employees).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: 701, empTypeCode: "T010C_ROSTERABLE", postCode: "BETTING_SERVICE", cutoffDays: 3, baselineRule: "BASE_ROSTERABLE", priorityRosterEnable: 1 }),
@@ -54,15 +55,16 @@ describe("T010 经理员工目录", () => {
     expect(first.body.data.employees).toContainEqual(expect.objectContaining({ id: 704, orgId: 32, cutoffDays: 1, baselineRule: "BASE_UNROSTERABLE" }));
     expect(first.body.data.employees.some((row: { id: number }) => row.id === 705)).toBe(false);
     const firstOnSecondOrg = await request(app).get("/api/manager/employees").set({ ...manager1, "x-mock-org-id": "2" });
-    expect(firstOnSecondOrg.status).toBe(200);
-    expect(firstOnSecondOrg.body.data.orgId).toBe(2);
-    expect(firstOnSecondOrg.body.data.employees).toEqual(expect.arrayContaining([expect.objectContaining({ id: 702 })]));
-    expect(firstOnSecondOrg.body.data.employees.some((row: { id: number }) => row.id === 701)).toBe(false);
+    expect(firstOnSecondOrg.status).toBe(403);
     const second = await request(app).get("/api/manager/employees").set(manager2);
     expect(second.status).toBe(200);
     expect(second.body.data.employees).toEqual(expect.arrayContaining([expect.objectContaining({ id: 702, cutoffDays: null, baselineRule: null })]));
     expect(second.body.data.employees.some((row: { id: number }) => row.id === 701)).toBe(false);
-    expect(second.body.data.organizations).toEqual([expect.objectContaining({ id: 2 })]);
+    expect(second.body.data.organizations).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 20, parentOrgId: null }),
+      expect.objectContaining({ id: 2, parentOrgId: 20 }),
+    ]));
+    expect(second.body.data.organizations).toHaveLength(2);
   });
 
   it("员工和管理员无法访问，经理不能访问范围外组织", async () => {
@@ -71,14 +73,17 @@ describe("T010 经理员工目录", () => {
     expect((await request(app).get("/api/manager/employees").set({ "x-mock-role": "manager", "x-mock-user-id": "9101", "x-mock-org-id": "999" })).status).toBe(403);
     expect((await request(app).get("/api/manager/employees").set({ ...manager1, "x-mock-org-id": "33" })).status).toBe(403);
     expect((await request(app).get("/api/manager/employees").set({ ...manager2, "x-mock-org-id": "32" })).status).toBe(403);
+    expect((await request(app).get("/api/manager/employees").set({ ...manager1, "x-mock-org-id": "20" })).status).toBe(403);
+    expect((await request(app).get("/api/manager/employees").set({ ...manager2, "x-mock-org-id": "15" })).status).toBe(403);
   });
 
   it("可排性记录和模拟班次查询沿用当前组织选择并拒绝范围外组织", async () => {
-    const manager1Org2 = { ...manager1, "x-mock-org-id": "2" };
-    expect((await request(app).get("/api/rosterability-records").query({ orgId: 2 }).set(manager1Org2)).status).toBe(200);
-    expect((await request(app).get("/api/mock-shifts").query({ orgId: 2 }).set(manager1Org2)).status).toBe(200);
-    expect((await request(app).get("/api/rosterability-records").query({ orgId: 999 }).set(manager1Org2)).status).toBe(403);
-    expect((await request(app).get("/api/mock-shifts").query({ orgId: 999 }).set(manager1Org2)).status).toBe(403);
+    expect((await request(app).get("/api/rosterability-records").query({ orgId: 1 }).set(manager1)).status).toBe(200);
+    expect((await request(app).get("/api/mock-shifts").query({ orgId: 1 }).set(manager1)).status).toBe(200);
+    expect((await request(app).get("/api/rosterability-records").query({ orgId: 2 }).set(manager1)).status).toBe(403);
+    expect((await request(app).get("/api/mock-shifts").query({ orgId: 2 }).set(manager1)).status).toBe(403);
+    expect((await request(app).get("/api/rosterability-records").query({ orgId: 1 }).set(manager2)).status).toBe(403);
+    expect((await request(app).get("/api/mock-shifts").query({ orgId: 1 }).set(manager2)).status).toBe(403);
   });
 
   it("选中父组织时查询子孙组织记录和班次，选中子组织时收窄范围", async () => {
@@ -107,25 +112,26 @@ describe("T010 经理员工目录", () => {
   it("多选组织合并子树且去重，混入无权限组织时整体拒绝", async () => {
     const day = "2099-12-05";
     await prisma.dtaRosterabilityRecord.createMany({ data: [
-      { tenantId: 1, orgId: 2, empId: 702, empTypeCode: "CONTRACT_PT", businessDate: day, statusCode: "ROSTERABLE", sourceCode: "EMP_SUBMIT", startTime: hkDateTime(day, "09:00"), endTime: hkDateTime(day, "10:00"), ...by },
+      { tenantId: 1, orgId: 1, empId: 701, empTypeCode: "T010C_ROSTERABLE", businessDate: day, statusCode: "ROSTERABLE", sourceCode: "EMP_SUBMIT", startTime: hkDateTime(day, "09:00"), endTime: hkDateTime(day, "10:00"), ...by },
       { tenantId: 1, orgId: 32, empId: 704, empTypeCode: "CONTRACT_PT", businessDate: day, statusCode: "ROSTERABLE", sourceCode: "EMP_SUBMIT", startTime: hkDateTime(day, "10:00"), endTime: hkDateTime(day, "11:00"), ...by },
     ] });
     await prisma.dtaMockShift.createMany({ data: [
-      { tenantId: 1, orgId: 2, empId: 702, businessDate: day, shiftName: "T010 multi org2", startTime: hkDateTime(day, "11:00"), endTime: hkDateTime(day, "12:00"), durationMinutes: 60, ...by },
+      { tenantId: 1, orgId: 1, empId: 701, businessDate: day, shiftName: "T010 multi org1", startTime: hkDateTime(day, "11:00"), endTime: hkDateTime(day, "12:00"), durationMinutes: 60, ...by },
       { tenantId: 1, orgId: 32, empId: 704, businessDate: day, shiftName: "T010 multi child", startTime: hkDateTime(day, "12:00"), endTime: hkDateTime(day, "13:00"), durationMinutes: 60, ...by },
     ] });
-    const directory = await request(app).get("/api/manager/employees").query({ orgIds: "1,31,2" }).set(manager1);
+    const directory = await request(app).get("/api/manager/employees").query({ orgIds: "15,1,31" }).set(manager1);
     expect(directory.status).toBe(200);
-    expect(directory.body.data.orgIds).toEqual([1, 31, 2]);
+    expect(directory.body.data.orgIds).toEqual([15, 1, 31]);
     expect(directory.body.data.employees.filter((row: { id: number }) => row.id === 704)).toHaveLength(1);
-    expect(directory.body.data.employees).toEqual(expect.arrayContaining([expect.objectContaining({ id: 701 }), expect.objectContaining({ id: 702 }), expect.objectContaining({ id: 704 })]));
-    const records = await request(app).get("/api/rosterability-records").query({ orgIds: "1,31,2", from: day, to: day }).set(manager1);
+    expect(directory.body.data.employees).toEqual(expect.arrayContaining([expect.objectContaining({ id: 701 }), expect.objectContaining({ id: 704 })]));
+    expect(directory.body.data.employees.some((row: { id: number }) => row.id === 702)).toBe(false);
+    const records = await request(app).get("/api/rosterability-records").query({ orgIds: "15,1,31", from: day, to: day }).set(manager1);
     expect(records.status).toBe(200);
-    expect(records.body.data.map((row: { empId: number }) => row.empId).sort()).toEqual([702, 704]);
-    const shifts = await request(app).get("/api/mock-shifts").query({ orgIds: "1,31,2" }).set(manager1);
+    expect(records.body.data.map((row: { empId: number }) => row.empId).sort()).toEqual([701, 704]);
+    const shifts = await request(app).get("/api/mock-shifts").query({ orgIds: "15,1,31" }).set(manager1);
     expect(shifts.status).toBe(200);
-    expect(shifts.body.data.filter((row: { businessDate: string }) => row.businessDate === day).map((row: { empId: number }) => row.empId).sort()).toEqual([702, 704]);
-    const generated = await request(app).post("/api/template-generation").set(manager1).send({ orgIds: [1, 31, 2] });
+    expect(shifts.body.data.filter((row: { businessDate: string }) => row.businessDate === day).map((row: { empId: number }) => row.empId).sort()).toEqual([701, 704]);
+    const generated = await request(app).post("/api/template-generation").set(manager1).send({ orgIds: [15, 1, 31] });
     expect(generated.status).toBe(200);
     expect(generated.body.data.employeeCount).toBe(directory.body.data.employees.length);
     expect((await request(app).post("/api/template-generation").set(manager1).send({ orgIds: [1, 33] })).status).toBe(403);

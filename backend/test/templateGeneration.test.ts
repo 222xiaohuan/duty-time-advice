@@ -13,7 +13,7 @@ const now = new Date("2026-11-15T00:00:00.000Z");
 
 beforeAll(async () => {
   const by = { createdBy: 9001, updatedBy: 9001 };
-  await prisma.dtaTenant.create({ data: { id: 1, tenantName: "Test", ...by } });
+  await prisma.dtaTenant.upsert({ where: { id: 1 }, update: {}, create: { id: 1, tenantName: "Test", ...by } });
   for (const id of [1, 2]) {
     await prisma.dtaOrg.upsert({ where: { id }, update: { orgName: `Org ${id}` }, create: { id, tenantId: 1, orgName: `Org ${id}`, ...by } });
   }

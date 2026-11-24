@@ -40,7 +40,20 @@ describe("Mock 身份中间件", () => {
       .set("x-mock-role", "manager")
       .set("x-mock-user-id", "9101")
       .set("x-mock-org-id", "1");
-    expect(res.body.data).toMatchObject({ role: "manager", userId: 9101, orgId: 1, orgIds: expect.arrayContaining([1, 2]) });
+    expect(res.body.data).toMatchObject({ role: "manager", userId: 9101, orgId: 1, orgIds: expect.arrayContaining([15, 1]) });
+    expect(res.body.data.orgIds).not.toContain(20);
+    expect(res.body.data.orgIds).not.toContain(2);
+  });
+
+  it("两位主管分别只拥有各自 Outlet 的权限", async () => {
+    for (const [userId, orgId, otherOrgId] of [[9101, 15, 20], [9102, 20, 15]]) {
+      const headers = { "x-mock-role": "manager", "x-mock-user-id": String(userId), "x-mock-org-id": String(orgId) };
+      const own = await request(app).get("/api/me").set(headers);
+      expect(own.status).toBe(200);
+      expect(own.body.data.orgIds).toContain(orgId);
+      expect(own.body.data.orgIds).not.toContain(otherOrgId);
+      expect((await request(app).get("/api/me").set({ ...headers, "x-mock-org-id": String(otherOrgId) })).status).toBe(403);
+    }
   });
 });
 
