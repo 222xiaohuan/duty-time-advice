@@ -78,7 +78,7 @@ function availabilitySegments(employee: Employee, rows: RecordRow[], day: string
 
 export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; statuses: StatusDictionaryItem[] }) {
   const [directory, setDirectory] = useState<Directory | null>(null);
-  const [selectedOrgId, setSelectedOrgId] = useState<number | null>(profile.orgId ?? null);
+  const [selectedOrgIds, setSelectedOrgIds] = useState<number[]>(profile.orgId === undefined ? [] : [profile.orgId]);
   const [monday, setMonday] = useState(() => mondayOf(hkToday()));
   const [day, setDay] = useState(() => hkToday());
   const [mode, setMode] = useState<"week" | "day">("week");
@@ -102,7 +102,8 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [refresh, setRefresh] = useState(0);
-  const managerProfile = useMemo(() => selectedOrgId === null || selectedOrgId === profile.orgId ? profile : { ...profile, orgId: selectedOrgId }, [profile, selectedOrgId]);
+  const selectedOrgIdsKey = selectedOrgIds.join(",");
+  const managerProfile = useMemo(() => selectedOrgIds[0] === profile.orgId ? profile : { ...profile, orgId: selectedOrgIds[0] }, [profile, selectedOrgIds]);
   const weekDays = Array.from({ length: 7 }, (_, index) => addDays(monday, index));
   const employees = (directory?.employees ?? []).filter((employee) =>
     (!employeeFilter || String(employee.id) === employeeFilter) && (!typeFilter || employee.empTypeCode === typeFilter) && (!postFilter || employee.postCode === postFilter));
@@ -123,25 +124,25 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
   useEffect(() => {
     let active = true;
     setDirectory(null); setSelection(null); setRecords([]); setShifts([]); setDialogMode(null); setSelectedMarker(null); setLoading(true); setError("");
-    apiGet<Directory>("/manager/employees", managerProfile).then((data) => {
+    apiGet<Directory>(`/manager/employees?orgIds=${selectedOrgIdsKey}`, managerProfile).then((data) => {
       if (!active) return;
       setDirectory(data);
     }).catch((cause: unknown) => { if (active) { setError(errorText(cause)); setLoading(false); } });
     return () => { active = false; };
-  }, [managerProfile]);
+  }, [managerProfile, selectedOrgIdsKey]);
 
   useEffect(() => {
     if (!directory) return;
     let active = true;
     setLoading(true);
     Promise.all([
-      apiGet<RecordRow[]>(`/rosterability-records?orgId=${directory.orgId}&from=${addDays(mode === "day" ? day : monday, -1)}&to=${mode === "day" ? day : weekDays[6]}`, managerProfile),
-      apiGet<ShiftRow[]>(`/mock-shifts?orgId=${directory.orgId}`, managerProfile),
+      apiGet<RecordRow[]>(`/rosterability-records?orgIds=${selectedOrgIdsKey}&from=${addDays(mode === "day" ? day : monday, -1)}&to=${mode === "day" ? day : weekDays[6]}`, managerProfile),
+      apiGet<ShiftRow[]>(`/mock-shifts?orgIds=${selectedOrgIdsKey}`, managerProfile),
     ]).then(([nextRecords, nextShifts]) => {
       if (active) { setRecords(nextRecords); setShifts(nextShifts); setLoading(false); }
     }).catch((cause: unknown) => { if (active) { setError(errorText(cause)); setLoading(false); } });
     return () => { active = false; };
-  }, [directory, monday, day, mode, managerProfile, refresh]);
+  }, [directory, monday, day, mode, managerProfile, selectedOrgIdsKey, refresh]);
 
   useEffect(() => {
     if (!directory) return;
@@ -301,7 +302,7 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
       <div className="schedule-view-switch" role="group" aria-label="模拟排班呈现方式"><button type="button" className={mode === "week" ? "selected" : ""} aria-pressed={mode === "week"} onClick={() => { setMode("week"); closeDialog(); }}>周模式</button><button type="button" className={mode === "day" ? "selected" : ""} aria-pressed={mode === "day"} onClick={() => { setMode("day"); closeDialog(); }}>天模式</button></div>
     </div>
     <div className="schedule-filters">
-      <ManagerOrgPicker organizations={directory?.organizations ?? []} value={selectedOrgId} onChange={(next) => { setSelectedOrgId(next); setEmployeeFilter(""); setTypeFilter(""); setPostFilter(""); closeDialog(); setSelectedMarker(null); setNotice(""); }} />
+      <ManagerOrgPicker organizations={directory?.organizations ?? []} value={selectedOrgIds} onChange={(next) => { setSelectedOrgIds(next); setEmployeeFilter(""); setTypeFilter(""); setPostFilter(""); closeDialog(); setSelectedMarker(null); setNotice(""); }} />
       <label>员工<select value={employeeFilter} onChange={(event) => { setEmployeeFilter(event.target.value); setSelectedMarker(null); }}><option value="">全部员工</option>{directory?.employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.empName}</option>)}</select></label>
       <label>员工类型<select value={typeFilter} onChange={(event) => { setTypeFilter(event.target.value); setSelectedMarker(null); }}><option value="">全部类型</option>{employeeTypes.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label>
       <label>岗位<select value={postFilter} onChange={(event) => { setPostFilter(event.target.value); setSelectedMarker(null); }}><option value="">全部岗位</option>{posts.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label>

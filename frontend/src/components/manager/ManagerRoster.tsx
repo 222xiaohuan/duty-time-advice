@@ -41,7 +41,7 @@ function period(mode: Mode, day: string) {
 
 export function ManagerRoster({ profile, statuses, sources }: { profile: MockProfile; statuses: StatusDictionaryItem[]; sources: SourceDictionaryItem[] }) {
   const [directory, setDirectory] = useState<Directory | null>(null);
-  const [selectedOrgId, setSelectedOrgId] = useState<number | null>(profile.orgId ?? null);
+  const [selectedOrgIds, setSelectedOrgIds] = useState<number[]>(profile.orgId === undefined ? [] : [profile.orgId]);
   const [mode, setMode] = useState<Mode>("day");
   const [anchor, setAnchor] = useState(hkToday);
   const [employeeFilter, setEmployeeFilter] = useState("");
@@ -63,7 +63,8 @@ export function ManagerRoster({ profile, statuses, sources }: { profile: MockPro
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [refresh, setRefresh] = useState(0);
-  const managerProfile = useMemo(() => selectedOrgId === null || selectedOrgId === profile.orgId ? profile : { ...profile, orgId: selectedOrgId }, [profile, selectedOrgId]);
+  const selectedOrgIdsKey = selectedOrgIds.join(",");
+  const managerProfile = useMemo(() => selectedOrgIds[0] === profile.orgId ? profile : { ...profile, orgId: selectedOrgIds[0] }, [profile, selectedOrgIds]);
   const range = period(mode, anchor);
 
   useEffect(() => {
@@ -77,26 +78,26 @@ export function ManagerRoster({ profile, statuses, sources }: { profile: MockPro
   useEffect(() => {
     let active = true;
     setDirectory(null); setSelection(null); setRecords([]); setShifts([]); setLoading(true); setError("");
-    apiGet<Directory>("/manager/employees", managerProfile).then((data) => {
+    apiGet<Directory>(`/manager/employees?orgIds=${selectedOrgIdsKey}`, managerProfile).then((data) => {
       if (!active) return;
       setDirectory(data);
       setSelection(null);
     }).catch((cause: unknown) => { if (active) setError(errorText(cause)); });
     return () => { active = false; };
-  }, [managerProfile]);
+  }, [managerProfile, selectedOrgIdsKey]);
 
   useEffect(() => {
     if (!directory) return;
     let active = true;
     setLoading(true);
     Promise.all([
-      apiGet<RecordRow[]>(`/rosterability-records?orgId=${directory.orgId}&from=${mode === "day" || mode === "person" ? addDays(range.from, -1) : range.from}&to=${range.to}`, managerProfile),
-      apiGet<ShiftRow[]>(`/mock-shifts?orgId=${directory.orgId}`, managerProfile),
+      apiGet<RecordRow[]>(`/rosterability-records?orgIds=${selectedOrgIdsKey}&from=${mode === "day" || mode === "person" ? addDays(range.from, -1) : range.from}&to=${range.to}`, managerProfile),
+      apiGet<ShiftRow[]>(`/mock-shifts?orgIds=${selectedOrgIdsKey}`, managerProfile),
     ]).then(([nextRecords, nextShifts]) => {
       if (active) { setRecords(nextRecords); setShifts(nextShifts); setLoading(false); }
     }).catch((cause: unknown) => { if (active) { setError(errorText(cause)); setLoading(false); } });
     return () => { active = false; };
-  }, [directory, managerProfile, range.from, range.to, mode, refresh]);
+  }, [directory, managerProfile, selectedOrgIdsKey, range.from, range.to, mode, refresh]);
 
   useEffect(() => {
     if (!directory) return;
@@ -168,7 +169,7 @@ export function ManagerRoster({ profile, statuses, sources }: { profile: MockPro
   async function generate() {
     setBusy(true); setError(""); setNotice("");
     try {
-      const result = await apiPost<GenerateResult>("/template-generation", managerProfile, {});
+      const result = await apiPost<GenerateResult>("/template-generation", managerProfile, { orgIds: selectedOrgIds });
       setGeneration(result); setMode("week"); setAnchor(result.startMonday); setPersonAddRequest(null);
       setSelection(null);
       setEditingRecord(null); setRecordForm(newRecord());
@@ -209,7 +210,7 @@ export function ManagerRoster({ profile, statuses, sources }: { profile: MockPro
       <div className="manager-toolbar-actions"><Button type="button" variant="outline" onClick={showImportExportPlaceholder}><Upload size={15} />导入</Button><Button type="button" variant="outline" onClick={showImportExportPlaceholder}><Download size={15} />导出</Button>{mode !== "person" && <Button type="button" onClick={() => void generate()} disabled={busy || !directory}><CalendarDays size={16} />生成可排时段</Button>}</div>
     </div>
     <div className="manager-filters">
-      <ManagerOrgPicker organizations={directory?.organizations ?? []} value={selectedOrgId} onChange={(next) => { setSelectedOrgId(next); setEmployeeFilter(""); setTypeFilter(""); setPostFilter(""); setStatusFilter(""); setSourceFilter(""); setSelection(null); setEditingRecord(null); setRecordForm(newRecord()); setGeneration(null); setNotice(""); }} />
+      <ManagerOrgPicker organizations={directory?.organizations ?? []} value={selectedOrgIds} onChange={(next) => { setSelectedOrgIds(next); setEmployeeFilter(""); setTypeFilter(""); setPostFilter(""); setStatusFilter(""); setSourceFilter(""); setSelection(null); setEditingRecord(null); setRecordForm(newRecord()); setGeneration(null); setNotice(""); }} />
       {mode !== "person" && <label>员工<select value={employeeFilter} onChange={(event) => setEmployeeFilter(event.target.value)}><option value="">全部员工</option>{directory?.employees.map((employee) => <option value={employee.id} key={employee.id}>{employee.empName}</option>)}</select></label>}
       <label>员工类型<select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="">全部类型</option>{employeeTypes.map((type) => <option value={type.code} key={type.code}>{type.name}</option>)}</select></label>
       <label>岗位<select value={postFilter} onChange={(event) => setPostFilter(event.target.value)}><option value="">全部岗位</option>{posts.map((post) => <option value={post.code} key={post.code}>{post.name}</option>)}</select></label>

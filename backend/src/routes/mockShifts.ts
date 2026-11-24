@@ -6,7 +6,7 @@ import { assertEmployeeAccess, assertOrgAccess } from "../lib/access";
 import { bad, parseDate, parseId, parseTime, TENANT_ID } from "../lib/validation";
 import { hkDateOf, hkDateTime } from "../lib/time";
 import { DtaRosterabilityStatus } from "../types/enums";
-import { managerSelectedOrgIds } from "../lib/orgScope";
+import { managerSelectedOrgIds, parseSelectedOrgIds } from "../lib/orgScope";
 
 export const mockShiftsRouter = Router();
 
@@ -60,8 +60,11 @@ mockShiftsRouter.get("/", async (req, res, next) => {
     const empId = req.query.empId === undefined ? undefined : parseId(req.query.empId, "empId");
     if (empId !== undefined) assertEmployeeAccess(req, empId);
     const orgId = req.query.orgId === undefined ? undefined : parseId(req.query.orgId, "orgId");
+    const orgIds = req.query.orgIds === undefined ? undefined : parseSelectedOrgIds(req.query.orgIds, identity.orgId);
+    if (orgIds && identity.role !== "manager") bad("orgIds 仅供主管筛选使用");
+    if (orgId !== undefined && orgIds) bad("orgId 与 orgIds 不能同时使用");
     if (orgId !== undefined) assertOrgAccess(req, orgId);
-    const selectedOrgIds = identity.role === "manager" ? await managerSelectedOrgIds(identity, orgId ?? identity.orgId) : null;
+    const selectedOrgIds = identity.role === "manager" ? await managerSelectedOrgIds(identity, orgIds ?? (orgId === undefined ? undefined : [orgId])) : null;
     const rows = await prisma.dtaMockShift.findMany({ where: { tenantId: TENANT_ID, isDeleted: 0, ...(empId ? { empId } : {}), ...(identity.role !== "manager" && orgId ? { orgId } : {}), ...(identity.role === "employee" ? { empId: identity.userId } : {}), ...(selectedOrgIds ? { orgId: { in: selectedOrgIds } } : {}) }, orderBy: [{ businessDate: "asc" }, { startTime: "asc" }] });
     ok(res, rows);
   } catch (error) { next(error); }

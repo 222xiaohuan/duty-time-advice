@@ -104,6 +104,37 @@ describe("T010 经理员工目录", () => {
     expect((await request(app).get("/api/mock-shifts").query({ orgId: 33 }).set(manager1)).status).toBe(403);
   });
 
+  it("多选组织合并子树且去重，混入无权限组织时整体拒绝", async () => {
+    const day = "2099-12-05";
+    await prisma.dtaRosterabilityRecord.createMany({ data: [
+      { tenantId: 1, orgId: 2, empId: 702, empTypeCode: "CONTRACT_PT", businessDate: day, statusCode: "ROSTERABLE", sourceCode: "EMP_SUBMIT", startTime: hkDateTime(day, "09:00"), endTime: hkDateTime(day, "10:00"), ...by },
+      { tenantId: 1, orgId: 32, empId: 704, empTypeCode: "CONTRACT_PT", businessDate: day, statusCode: "ROSTERABLE", sourceCode: "EMP_SUBMIT", startTime: hkDateTime(day, "10:00"), endTime: hkDateTime(day, "11:00"), ...by },
+    ] });
+    await prisma.dtaMockShift.createMany({ data: [
+      { tenantId: 1, orgId: 2, empId: 702, businessDate: day, shiftName: "T010 multi org2", startTime: hkDateTime(day, "11:00"), endTime: hkDateTime(day, "12:00"), durationMinutes: 60, ...by },
+      { tenantId: 1, orgId: 32, empId: 704, businessDate: day, shiftName: "T010 multi child", startTime: hkDateTime(day, "12:00"), endTime: hkDateTime(day, "13:00"), durationMinutes: 60, ...by },
+    ] });
+    const directory = await request(app).get("/api/manager/employees").query({ orgIds: "1,31,2" }).set(manager1);
+    expect(directory.status).toBe(200);
+    expect(directory.body.data.orgIds).toEqual([1, 31, 2]);
+    expect(directory.body.data.employees.filter((row: { id: number }) => row.id === 704)).toHaveLength(1);
+    expect(directory.body.data.employees).toEqual(expect.arrayContaining([expect.objectContaining({ id: 701 }), expect.objectContaining({ id: 702 }), expect.objectContaining({ id: 704 })]));
+    const records = await request(app).get("/api/rosterability-records").query({ orgIds: "1,31,2", from: day, to: day }).set(manager1);
+    expect(records.status).toBe(200);
+    expect(records.body.data.map((row: { empId: number }) => row.empId).sort()).toEqual([702, 704]);
+    const shifts = await request(app).get("/api/mock-shifts").query({ orgIds: "1,31,2" }).set(manager1);
+    expect(shifts.status).toBe(200);
+    expect(shifts.body.data.filter((row: { businessDate: string }) => row.businessDate === day).map((row: { empId: number }) => row.empId).sort()).toEqual([702, 704]);
+    const generated = await request(app).post("/api/template-generation").set(manager1).send({ orgIds: [1, 31, 2] });
+    expect(generated.status).toBe(200);
+    expect(generated.body.data.employeeCount).toBe(directory.body.data.employees.length);
+    expect((await request(app).post("/api/template-generation").set(manager1).send({ orgIds: [1, 33] })).status).toBe(403);
+    expect((await request(app).post("/api/template-generation").set(manager1).send({ orgIds: [] })).status).toBe(400);
+    expect((await request(app).get("/api/manager/employees").query({ orgIds: "1,33" }).set(manager1)).status).toBe(403);
+    expect((await request(app).get("/api/rosterability-records").query({ orgIds: "1,33" }).set(manager1)).status).toBe(403);
+    expect((await request(app).get("/api/mock-shifts").query({ orgIds: "1,33" }).set(manager1)).status).toBe(403);
+  });
+
   it("主管可维护授权子组织员工，但不能维护权限外员工", async () => {
     const day = "2099-12-02";
     const record = await request(app).post("/api/rosterability-records").set(manager1).send({ empId: 704, businessDate: day, statusCode: "ROSTERABLE", startTime: "09:00", endTime: "10:00", endDayOffset: 0 });

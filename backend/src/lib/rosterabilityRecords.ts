@@ -171,9 +171,9 @@ export async function deleteRecord(identity: MockIdentity, id: number, now: Date
   return prisma.dtaRosterabilityRecord.update({ where: { id }, data: { isDeleted: 1, updatedBy: identity.userId } });
 }
 
-export async function listRecords(identity: MockIdentity, filters: { empId?: number; orgId?: number; from?: string; to?: string }) {
+export async function listRecords(identity: MockIdentity, filters: { empId?: number; orgId?: number; orgIds?: number[]; from?: string; to?: string }) {
   if (identity.role === "employee" && filters.empId !== undefined && filters.empId !== identity.userId) forbidden("员工只能查看本人记录");
-  const selectedOrgIds = identity.role === "manager" ? await managerSelectedOrgIds(identity, filters.orgId ?? identity.orgId) : null;
+  const selectedOrgIds = identity.role === "manager" ? await managerSelectedOrgIds(identity, filters.orgIds ?? (filters.orgId === undefined ? undefined : [filters.orgId])) : null;
   if (filters.empId !== undefined) await employeeFor(identity, filters.empId);
   if (filters.from && filters.to && filters.from > filters.to) bad("from 不得晚于 to");
   const rows = await prisma.dtaRosterabilityRecord.findMany({ where: {

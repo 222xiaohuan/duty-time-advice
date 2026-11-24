@@ -390,14 +390,20 @@ button { cursor: pointer; }
 .manager-org-trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .manager-org-trigger:disabled { background: #edf1f4; color: #5d6c77; }
 .manager-org-trigger:focus-visible, .manager-org-tree-row button:focus-visible { outline: 2px solid #82adcf; outline-offset: 1px; }
-.manager-org-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 80; width: min(370px, calc(100vw - 32px)); max-height: min(360px, 60vh); overflow-y: auto; padding: 5px; border: 1px solid #ccd7df; border-radius: 4px; background: #fff; box-shadow: 0 10px 24px #102b4230; }
+.manager-org-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 80; display: flex; flex-direction: column; width: min(370px, calc(100vw - 32px)); max-height: min(360px, 60vh); padding: 5px; border: 1px solid #ccd7df; border-radius: 4px; background: #fff; box-shadow: 0 10px 24px #102b4230; }
+.manager-org-tree-scroll { min-height: 0; overflow-y: auto; }
 .manager-org-tree-row { display: flex; align-items: center; min-height: 34px; border-radius: 3px; }
 .manager-org-tree-row:hover, .manager-org-tree-row.selected { background: #edf3f8; }
 .manager-org-expand, .manager-org-expand-spacer { display: grid; place-items: center; flex: none; width: 23px; height: 30px; padding: 0; border: 0; background: transparent; color: #61778a; }
-.manager-org-option { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; min-height: 34px; padding: 4px 7px; border: 0; background: transparent; color: #263a4a; font-size: 12px; text-align: left; }
+.manager-filters label.manager-org-option, .schedule-filters label.manager-org-option { display: flex; flex-direction: row; align-items: center; gap: 7px; flex: 1; min-width: 0; min-height: 34px; padding: 4px 7px; border: 0; background: transparent; color: #263a4a; font-size: 12px; text-align: left; cursor: pointer; }
+.manager-org-option input { flex: none; width: 15px; height: 15px; margin: 0; accent-color: #0c547e; }
+.manager-org-option:has(input:disabled) { color: #61778a; cursor: default; }
 .manager-org-option > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-.manager-org-option > svg:first-child { flex: none; color: #0c547e; }
-.manager-org-option > svg:last-child { flex: none; color: #0c336a; }
+.manager-org-option > svg { flex: none; color: #0c547e; }
+.manager-org-menu-footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex: none; padding: 8px 4px 2px; border-top: 1px solid #d9e2e9; font-size: 11px; color: #61778a; }
+.manager-org-menu-footer button { min-height: 30px; padding: 4px 9px; border: 1px solid #ccd7df; border-radius: 3px; background: #fff; color: #0c547e; font-size: 11px; cursor: pointer; }
+.manager-org-menu-footer button.manager-org-apply { border-color: #0c336a; background: #0c336a; color: #fff; }
+.manager-org-menu-footer button:disabled { opacity: .5; cursor: not-allowed; }
 .manager-period-nav { justify-content: flex-start; }
 .manager-period-nav strong { min-width: 165px; text-align: center; font-size: 14px; }
 .schedule-view-switch { display: inline-flex; align-self: flex-start; border: 1px solid #cbd6de; border-radius: 4px; overflow: hidden; }

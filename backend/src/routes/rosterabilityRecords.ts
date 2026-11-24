@@ -6,6 +6,7 @@ import { requireRole } from "../middleware/mockIdentity";
 import { addDays, copyInput, createRecord, deleteRecord, detailRecord, employeeFor, listRecords, updateRecord, weekStart } from "../lib/rosterabilityRecords";
 import { bad, parseDate, parseId, TENANT_ID } from "../lib/validation";
 import { DtaSourceCode } from "../types/enums";
+import { parseSelectedOrgIds } from "../lib/orgScope";
 
 export const rosterabilityRecordsRouter = Router();
 
@@ -34,9 +35,12 @@ rosterabilityRecordsRouter.get("/", requireRole("admin", "manager", "employee"),
   try {
     const empId = req.query.empId === undefined ? undefined : parseId(req.query.empId, "empId");
     const orgId = req.query.orgId === undefined ? undefined : parseId(req.query.orgId, "orgId");
+    const orgIds = req.query.orgIds === undefined ? undefined : parseSelectedOrgIds(req.query.orgIds, req.identity!.orgId);
+    if (orgIds && req.identity!.role !== "manager") bad("orgIds 仅供主管筛选使用");
+    if (orgId !== undefined && orgIds) bad("orgId 与 orgIds 不能同时使用");
     const from = req.query.from === undefined ? undefined : parseDate(req.query.from, "from");
     const to = req.query.to === undefined ? undefined : parseDate(req.query.to, "to");
-    ok(res, await listRecords(req.identity!, { empId, orgId, from, to }));
+    ok(res, await listRecords(req.identity!, { empId, orgId, orgIds, from, to }));
   } catch (error) { next(error); }
 });
 
