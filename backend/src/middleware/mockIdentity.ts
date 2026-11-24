@@ -1,6 +1,9 @@
 import type { NextFunction, Request, Response } from "express";
 import { AppError, ErrorCode } from "../lib/response";
 import { MANAGER_USER_IDS, MOCK_ROLES, type MockRole } from "../types/enums";
+import { prisma } from "../lib/prisma";
+import { descendantOrgIds } from "../lib/orgScope";
+import { TENANT_ID } from "../lib/validation";
 
 export interface MockIdentity {
   role: MockRole;
@@ -24,7 +27,7 @@ function parsePositiveInt(value: string | undefined): number | null {
 }
 
 /** Demo 主管权限范围。标准产品由实际权限模型替换；请求中的 orgId 只是当前选择。 */
-export const MANAGER_ORG_IDS: Readonly<Record<number, readonly number[]>> = {
+export const MANAGER_ROOT_ORG_IDS: Readonly<Record<number, readonly number[]>> = {
   [MANAGER_USER_IDS.org1]: [1, 2],
   [MANAGER_USER_IDS.org2]: [2],
 };
@@ -33,7 +36,8 @@ export const MANAGER_ORG_IDS: Readonly<Record<number, readonly number[]>> = {
  * 从请求头解析 Mock 身份：x-mock-role、x-mock-user-id、x-mock-org-id。
  * Demo 不做登录，但所有权限判断都基于此身份在后端执行。
  */
-export function mockIdentity(req: Request, _res: Response, next: NextFunction): void {
+export async function mockIdentity(req: Request, _res: Response, next: NextFunction): Promise<void> {
+  try {
   const role = req.header("x-mock-role");
   if (!role || !(MOCK_ROLES as readonly string[]).includes(role)) {
     return next(new AppError(ErrorCode.UNAUTHORIZED, "缺少或无效的 x-mock-role，取值为 admin / manager / employee", 401));
@@ -48,7 +52,11 @@ export function mockIdentity(req: Request, _res: Response, next: NextFunction): 
     if (orgId === null) {
       return next(new AppError(ErrorCode.UNAUTHORIZED, "manager 角色必须提供 x-mock-org-id", 401));
     }
-    const allowedOrgIds = MANAGER_ORG_IDS[userId];
+    const rootOrgIds = MANAGER_ROOT_ORG_IDS[userId];
+    const organizations = rootOrgIds ? await prisma.dtaOrg.findMany({
+      where: { tenantId: TENANT_ID, isDeleted: 0 }, select: { id: true, parentOrgId: true },
+    }) : [];
+    const allowedOrgIds = rootOrgIds ? descendantOrgIds(rootOrgIds, organizations) : [];
     if (!allowedOrgIds || !allowedOrgIds.includes(orgId)) {
       return next(new AppError(ErrorCode.FORBIDDEN, "经理账号无权访问该组织", 403));
     }
@@ -57,6 +65,7 @@ export function mockIdentity(req: Request, _res: Response, next: NextFunction): 
   }
   req.identity = { role: role as MockRole, userId, orgId, orgIds: [] };
   next();
+  } catch (error) { next(error); }
 }
 
 /** 限定允许访问的角色 */

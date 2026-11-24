@@ -35,13 +35,13 @@ function selectTemplate(templates: Template[], conditions: Condition[], employee
   return candidates[0]?.template ?? null;
 }
 
-export async function generateForManager(orgId: number, managerId: number, now: Date = new Date(), templateId?: number) {
+export async function generateForManager(orgId: number, managerId: number, now: Date = new Date(), templateId?: number, selectedOrgIds: number[] = [orgId]) {
   const org = await prisma.dtaOrg.findFirst({ where: { id: orgId, tenantId: TENANT_ID, isDeleted: 0 } });
   if (!org) bad("管辖组织不存在");
   const startMonday = hkNow(now).startOf("week").plus({ weeks: 1 }).toISODate()!;
   const [employees, params, templates, conditions, employeeAssociations, items, statuses] = await Promise.all([
-    prisma.dtaEmployee.findMany({ where: { tenantId: TENANT_ID, orgId, isDeleted: 0 }, orderBy: { id: "asc" } }),
-    prisma.dtaParamGroup.findMany({ where: { tenantId: TENANT_ID, orgId, isDeleted: 0 } }),
+    prisma.dtaEmployee.findMany({ where: { tenantId: TENANT_ID, orgId: { in: selectedOrgIds }, isDeleted: 0 }, orderBy: { id: "asc" } }),
+    prisma.dtaParamGroup.findMany({ where: { tenantId: TENANT_ID, orgId: { in: selectedOrgIds }, isDeleted: 0 } }),
     prisma.dtaTemplate.findMany({ where: { tenantId: TENANT_ID, enabled: 1, isDeleted: 0, ...(templateId === undefined ? {} : { id: templateId }) } }),
     prisma.dtaTemplateCondition.findMany({ where: { tenantId: TENANT_ID, isDeleted: 0 } }),
     prisma.dtaTemplateEmployee.findMany({ where: { tenantId: TENANT_ID, isDeleted: 0 } }),
@@ -62,7 +62,7 @@ export async function generateForManager(orgId: number, managerId: number, now: 
   };
 
   for (const employee of employees) {
-    const param = params.find((row) => row.empTypeCode === employee.empTypeCode);
+    const param = params.find((row) => row.orgId === employee.orgId && row.empTypeCode === employee.empTypeCode);
     if (!param || param.autoGenRangeWeek === null || param.autoGenRangeWeek < 1 || param.autoGenRangeWeek > 12) {
       skip(employee.id, null, null, "NO_PARAM", "员工所属组织与员工类型未配置有效生成周数");
       continue;

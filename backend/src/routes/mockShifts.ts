@@ -6,6 +6,7 @@ import { assertEmployeeAccess, assertOrgAccess } from "../lib/access";
 import { bad, parseDate, parseId, parseTime, TENANT_ID } from "../lib/validation";
 import { hkDateOf, hkDateTime } from "../lib/time";
 import { DtaRosterabilityStatus } from "../types/enums";
+import { managerSelectedOrgIds } from "../lib/orgScope";
 
 export const mockShiftsRouter = Router();
 
@@ -60,8 +61,8 @@ mockShiftsRouter.get("/", async (req, res, next) => {
     if (empId !== undefined) assertEmployeeAccess(req, empId);
     const orgId = req.query.orgId === undefined ? undefined : parseId(req.query.orgId, "orgId");
     if (orgId !== undefined) assertOrgAccess(req, orgId);
-    // assertOrgAccess 已按主管的完整组织权限范围校验当前查询组织。
-    const rows = await prisma.dtaMockShift.findMany({ where: { tenantId: TENANT_ID, isDeleted: 0, ...(empId ? { empId } : {}), ...(orgId ? { orgId } : {}), ...(identity.role === "employee" ? { empId: identity.userId } : {}), ...(identity.role === "manager" ? { orgId: identity.orgId! } : {}) }, orderBy: [{ businessDate: "asc" }, { startTime: "asc" }] });
+    const selectedOrgIds = identity.role === "manager" ? await managerSelectedOrgIds(identity, orgId ?? identity.orgId) : null;
+    const rows = await prisma.dtaMockShift.findMany({ where: { tenantId: TENANT_ID, isDeleted: 0, ...(empId ? { empId } : {}), ...(identity.role !== "manager" && orgId ? { orgId } : {}), ...(identity.role === "employee" ? { empId: identity.userId } : {}), ...(selectedOrgIds ? { orgId: { in: selectedOrgIds } } : {}) }, orderBy: [{ businessDate: "asc" }, { startTime: "asc" }] });
     ok(res, rows);
   } catch (error) { next(error); }
 });

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight, Download, LockKeyhole, Plus, RefreshCw, Save, Trash2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ManagerDayTimeline } from "@/components/manager/ManagerDayTimeline";
+import { ManagerOrgPicker, type ManagerOrganization } from "@/components/manager/ManagerOrgPicker";
 import { apiDelete, apiGet, apiPatch, apiPost, type SourceDictionaryItem, type StatusDictionaryItem } from "@/lib/api";
 import { employeeTypes, errorText, labelOf, posts, weekdays } from "@/lib/admin";
 import { BaselineRule, RosterabilityStatus } from "@/lib/enums";
@@ -11,8 +12,7 @@ import { addDays, dayLocked, hkDate, hkTime, hkToday, managerLockMessage, monday
 
 type Mode = "day" | "person" | "week";
 type Employee = { id: number; empName: string; empTypeCode: string; postCode: string; cutoffDays: number | null; baselineRule: string | null; priorityRosterEnable: number };
-type Organization = { id: number; orgName: string };
-type Directory = { orgId: number; orgName: string; organizations: Organization[]; employees: Employee[] };
+type Directory = { orgId: number; orgName: string; organizations: ManagerOrganization[]; employees: Employee[] };
 type RecordRow = { id: number; empId: number; businessDate: string; statusCode: string; sourceCode: string; startTime: string; endTime: string; remark: string | null; locked: number };
 type ShiftRow = { id: number; empId: number; businessDate: string; shiftName: string; startTime: string; endTime: string; durationMinutes: number };
 type Selection = { empId: number; day: string };
@@ -209,7 +209,7 @@ export function ManagerRoster({ profile, statuses, sources }: { profile: MockPro
       <div className="manager-toolbar-actions"><Button type="button" variant="outline" onClick={showImportExportPlaceholder}><Upload size={15} />导入</Button><Button type="button" variant="outline" onClick={showImportExportPlaceholder}><Download size={15} />导出</Button>{mode !== "person" && <Button type="button" onClick={() => void generate()} disabled={busy || !directory}><CalendarDays size={16} />生成可排时段</Button>}</div>
     </div>
     <div className="manager-filters">
-      <label>组织<select value={selectedOrgId ?? ""} onChange={(event) => { const next = Number(event.currentTarget.value); if (!Number.isInteger(next)) return; setSelectedOrgId(next); setEmployeeFilter(""); setTypeFilter(""); setPostFilter(""); setStatusFilter(""); setSourceFilter(""); setSelection(null); setEditingRecord(null); setRecordForm(newRecord()); setGeneration(null); setNotice(""); }} disabled={!directory || directory.organizations.length < 2}><option value="" disabled>加载中</option>{directory?.organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.orgName}</option>)}</select></label>
+      <ManagerOrgPicker organizations={directory?.organizations ?? []} value={selectedOrgId} onChange={(next) => { setSelectedOrgId(next); setEmployeeFilter(""); setTypeFilter(""); setPostFilter(""); setStatusFilter(""); setSourceFilter(""); setSelection(null); setEditingRecord(null); setRecordForm(newRecord()); setGeneration(null); setNotice(""); }} />
       {mode !== "person" && <label>员工<select value={employeeFilter} onChange={(event) => setEmployeeFilter(event.target.value)}><option value="">全部员工</option>{directory?.employees.map((employee) => <option value={employee.id} key={employee.id}>{employee.empName}</option>)}</select></label>}
       <label>员工类型<select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)}><option value="">全部类型</option>{employeeTypes.map((type) => <option value={type.code} key={type.code}>{type.name}</option>)}</select></label>
       <label>岗位<select value={postFilter} onChange={(event) => setPostFilter(event.target.value)}><option value="">全部岗位</option>{posts.map((post) => <option value={post.code} key={post.code}>{post.name}</option>)}</select></label>

@@ -6,6 +6,7 @@ import { addDays, hkDateOf, hkDateTime, hkNow } from "./time";
 import { AppError, ErrorCode } from "./response";
 import { allowedRosterabilityStatuses, bad, baselineStatusMessage, parseDate, parseId, parseTime, TENANT_ID } from "./validation";
 import { BUSINESS_TIME_ZONE, DtaRosterabilityStatus, DtaSourceCode } from "../types/enums";
+import { managerSelectedOrgIds } from "./orgScope";
 
 export type RecordInput = {
   businessDate: string;
@@ -172,18 +173,15 @@ export async function deleteRecord(identity: MockIdentity, id: number, now: Date
 
 export async function listRecords(identity: MockIdentity, filters: { empId?: number; orgId?: number; from?: string; to?: string }) {
   if (identity.role === "employee" && filters.empId !== undefined && filters.empId !== identity.userId) forbidden("员工只能查看本人记录");
-  if (identity.role === "manager" && filters.orgId !== undefined) {
-    const managerOrgIds = identity.orgIds ?? (identity.orgId === null ? [] : [identity.orgId]);
-    if (!managerOrgIds.includes(filters.orgId)) forbidden("经理只能查看所辖组织记录");
-  }
+  const selectedOrgIds = identity.role === "manager" ? await managerSelectedOrgIds(identity, filters.orgId ?? identity.orgId) : null;
   if (filters.empId !== undefined) await employeeFor(identity, filters.empId);
   if (filters.from && filters.to && filters.from > filters.to) bad("from 不得晚于 to");
   const rows = await prisma.dtaRosterabilityRecord.findMany({ where: {
     tenantId: TENANT_ID, isDeleted: 0,
     ...(identity.role === "employee" ? { empId: identity.userId } : {}),
-    ...(identity.role === "manager" ? { orgId: identity.orgId! } : {}),
+    ...(selectedOrgIds ? { orgId: { in: selectedOrgIds } } : {}),
     ...(filters.empId ? { empId: filters.empId } : {}),
-    ...(filters.orgId ? { orgId: filters.orgId } : {}),
+    ...(identity.role !== "manager" && filters.orgId ? { orgId: filters.orgId } : {}),
     ...((filters.from || filters.to) ? { businessDate: { ...(filters.from ? { gte: filters.from } : {}), ...(filters.to ? { lte: filters.to } : {}) } } : {}),
   }, orderBy: [{ businessDate: "asc" }, { startTime: "asc" }, { id: "asc" }] });
   const params = await prisma.dtaParamGroup.findMany({ where: { tenantId: TENANT_ID, isDeleted: 0 } });

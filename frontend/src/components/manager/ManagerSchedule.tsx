@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent } from "react";
 import { ChevronLeft, ChevronRight, Plus, RefreshCw, Save, Search, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ManagerOrgPicker, type ManagerOrganization } from "@/components/manager/ManagerOrgPicker";
 import { apiDelete, apiGet, apiPatch, apiPost, type StatusDictionaryItem } from "@/lib/api";
 import { employeeTypes, errorText, labelOf, posts, weekdays } from "@/lib/admin";
 import { BaselineRule, RosterabilityStatus } from "@/lib/enums";
@@ -9,8 +10,7 @@ import { shiftPresets, type ShiftPreset } from "@/lib/shiftPresets";
 import { addDays, hkDate, hkTime, hkToday, mondayOf, shortDay } from "@/lib/week";
 
 type Employee = { id: number; empName: string; empTypeCode: string; postCode: string; baselineRule: string | null; priorityRosterEnable: number };
-type Organization = { id: number; orgName: string };
-type Directory = { orgId: number; orgName: string; organizations: Organization[]; employees: Employee[] };
+type Directory = { orgId: number; orgName: string; organizations: ManagerOrganization[]; employees: Employee[] };
 type RecordRow = { id: number; empId: number; businessDate: string; statusCode: string; startTime: string; endTime: string };
 type ShiftRow = { id: number; empId: number; businessDate: string; shiftName: string; startTime: string; endTime: string; durationMinutes: number };
 type Selection = { empId: number; day: string };
@@ -301,7 +301,7 @@ export function ManagerSchedule({ profile, statuses }: { profile: MockProfile; s
       <div className="schedule-view-switch" role="group" aria-label="模拟排班呈现方式"><button type="button" className={mode === "week" ? "selected" : ""} aria-pressed={mode === "week"} onClick={() => { setMode("week"); closeDialog(); }}>周模式</button><button type="button" className={mode === "day" ? "selected" : ""} aria-pressed={mode === "day"} onClick={() => { setMode("day"); closeDialog(); }}>天模式</button></div>
     </div>
     <div className="schedule-filters">
-      <label>组织<select value={selectedOrgId ?? ""} onChange={(event) => { const next = Number(event.currentTarget.value); if (!Number.isInteger(next)) return; setSelectedOrgId(next); setEmployeeFilter(""); setTypeFilter(""); setPostFilter(""); closeDialog(); setSelectedMarker(null); setNotice(""); }} disabled={!directory || directory.organizations.length < 2}><option value="" disabled>加载中</option>{directory?.organizations.map((organization) => <option key={organization.id} value={organization.id}>{organization.orgName}</option>)}</select></label>
+      <ManagerOrgPicker organizations={directory?.organizations ?? []} value={selectedOrgId} onChange={(next) => { setSelectedOrgId(next); setEmployeeFilter(""); setTypeFilter(""); setPostFilter(""); closeDialog(); setSelectedMarker(null); setNotice(""); }} />
       <label>员工<select value={employeeFilter} onChange={(event) => { setEmployeeFilter(event.target.value); setSelectedMarker(null); }}><option value="">全部员工</option>{directory?.employees.map((employee) => <option key={employee.id} value={employee.id}>{employee.empName}</option>)}</select></label>
       <label>员工类型<select value={typeFilter} onChange={(event) => { setTypeFilter(event.target.value); setSelectedMarker(null); }}><option value="">全部类型</option>{employeeTypes.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label>
       <label>岗位<select value={postFilter} onChange={(event) => { setPostFilter(event.target.value); setSelectedMarker(null); }}><option value="">全部岗位</option>{posts.map((item) => <option key={item.code} value={item.code}>{item.name}</option>)}</select></label>

@@ -73,7 +73,8 @@ describe("T003 模板维护与经理生成", () => {
     expect((await request(app).post("/api/template-generation").set(manager1).send({ templateId: 999999 })).status).toBe(404);
     const otherOrg = await generateForManager(2, 9102, now);
     expect(otherOrg.summary.created).toBe(0);
-    expect(otherOrg.skipped.every((row) => row.empId === 2 || row.empId === 102)).toBe(true);
+    const org2Ids = new Set((await prisma.dtaEmployee.findMany({ where: { orgId: 2, isDeleted: 0 }, select: { id: true } })).map((row) => row.id));
+    expect(otherOrg.skipped.every((row) => org2Ids.has(row.empId))).toBe(true);
   });
 
   it("生成跨午夜时段，阻止有班次的不可排，并在重复点击及软删除后保持幂等", async () => {

@@ -40,7 +40,7 @@ describe("Mock 身份中间件", () => {
       .set("x-mock-role", "manager")
       .set("x-mock-user-id", "9101")
       .set("x-mock-org-id", "1");
-    expect(res.body.data).toEqual({ role: "manager", userId: 9101, orgId: 1, orgIds: [1, 2] });
+    expect(res.body.data).toMatchObject({ role: "manager", userId: 9101, orgId: 1, orgIds: expect.arrayContaining([1, 2]) });
   });
 });
 

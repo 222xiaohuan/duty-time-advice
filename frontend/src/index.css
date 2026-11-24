@@ -384,6 +384,20 @@ button { cursor: pointer; }
 .manager-filters label { display: flex; flex-direction: column; min-width: 0; gap: 5px; color: #526171; font-size: 11px; font-weight: 600; }
 .manager-filters select { width: 100%; min-width: 0; height: 35px; padding: 0 8px; border: 1px solid #ccd7df; border-radius: 4px; background: #fff; color: #263a4a; font-size: 12px; }
 .manager-filters select:disabled { background: #edf1f4; color: #5d6c77; }
+.manager-org-filter { display: flex; flex-direction: column; min-width: 0; gap: 5px; color: #526171; font-size: 11px; font-weight: 600; }
+.manager-org-picker { position: relative; min-width: 0; }
+.manager-org-trigger { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; height: 35px; padding: 0 8px; border: 1px solid #ccd7df; border-radius: 4px; background: #fff; color: #263a4a; font-size: 12px; text-align: left; }
+.manager-org-trigger > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.manager-org-trigger:disabled { background: #edf1f4; color: #5d6c77; }
+.manager-org-trigger:focus-visible, .manager-org-tree-row button:focus-visible { outline: 2px solid #82adcf; outline-offset: 1px; }
+.manager-org-menu { position: absolute; top: calc(100% + 4px); left: 0; z-index: 80; width: min(370px, calc(100vw - 32px)); max-height: min(360px, 60vh); overflow-y: auto; padding: 5px; border: 1px solid #ccd7df; border-radius: 4px; background: #fff; box-shadow: 0 10px 24px #102b4230; }
+.manager-org-tree-row { display: flex; align-items: center; min-height: 34px; border-radius: 3px; }
+.manager-org-tree-row:hover, .manager-org-tree-row.selected { background: #edf3f8; }
+.manager-org-expand, .manager-org-expand-spacer { display: grid; place-items: center; flex: none; width: 23px; height: 30px; padding: 0; border: 0; background: transparent; color: #61778a; }
+.manager-org-option { display: flex; align-items: center; gap: 7px; flex: 1; min-width: 0; min-height: 34px; padding: 4px 7px; border: 0; background: transparent; color: #263a4a; font-size: 12px; text-align: left; }
+.manager-org-option > span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.manager-org-option > svg:first-child { flex: none; color: #0c547e; }
+.manager-org-option > svg:last-child { flex: none; color: #0c336a; }
 .manager-period-nav { justify-content: flex-start; }
 .manager-period-nav strong { min-width: 165px; text-align: center; font-size: 14px; }
 .schedule-view-switch { display: inline-flex; align-self: flex-start; border: 1px solid #cbd6de; border-radius: 4px; overflow: hidden; }
@@ -587,6 +601,7 @@ button { cursor: pointer; }
 .schedule-filters label { display: flex; flex-direction: column; min-width: 0; gap: 5px; color: #526171; font-size: 11px; font-weight: 600; }
 .schedule-filters select { width: 100%; min-width: 0; height: 36px; padding: 0 9px; border: 1px solid #ccd7df; border-radius: 4px; background: #fff; color: #263a4a; font-size: 12px; }
 .schedule-filters select:disabled { background: #edf1f4; color: #5d6c77; }
+.schedule-filters .manager-org-trigger { height: 36px; }
 .schedule-legend { display: flex; flex-wrap: wrap; gap: 18px; color: #637380; font-size: 11px; }
 .schedule-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .schedule-legend i { width: 21px; height: 4px; border-radius: 2px; }
