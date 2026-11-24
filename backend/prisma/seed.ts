@@ -68,21 +68,24 @@ async function main() {
     { id: 20, orgName: "JC003003 STRC Outlet01", parentOrgId: 7 },
   ].map((org) => ({ ...org, tenantId, ...by })) });
 
+  const hvrcOutletOrgId = 15;
+  const strcOutletOrgId = 20;
+
   const employees = [
-    { id: 1, orgId: org1.id, empName: "陈志明", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.BETTING_SERVICE },
-    { id: 2, orgId: org1.id, empName: "李嘉欣", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.CROWD_CONTROL },
-    { id: 3, orgId: org1.id, empName: "黄伟强", empTypeCode: EMP_TYPE_CODES.CONTRACT_PT, postCode: POST_CODES.BETTING_SERVICE },
-    { id: 4, orgId: org1.id, empName: "张美玲", empTypeCode: EMP_TYPE_CODES.CASUAL_PT, postCode: POST_CODES.CROWD_CONTROL },
-    { id: 9, orgId: org1.id, empName: "王志豪", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.BETTING_SERVICE },
-    { id: 10, orgId: org1.id, empName: "陈雅婷", empTypeCode: EMP_TYPE_CODES.CONTRACT_PT, postCode: POST_CODES.CROWD_CONTROL },
-    { id: 11, orgId: org1.id, empName: "林家俊", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.CROWD_CONTROL },
-    { id: 12, orgId: org1.id, empName: "何嘉怡", empTypeCode: EMP_TYPE_CODES.CASUAL_PT, postCode: POST_CODES.BETTING_SERVICE },
-    { id: 13, orgId: org1.id, empName: "梁文杰", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.BETTING_SERVICE },
-    { id: 14, orgId: org1.id, empName: "苏晓彤", empTypeCode: EMP_TYPE_CODES.CASUAL_PT, postCode: POST_CODES.CROWD_CONTROL },
-    { id: 5, orgId: org2.id, empName: "刘家豪", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.CUSTOMER_SERVICE },
-    { id: 6, orgId: org2.id, empName: "吴咏诗", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.CROWD_CONTROL },
-    { id: 7, orgId: org2.id, empName: "林俊杰", empTypeCode: EMP_TYPE_CODES.CONTRACT_PT, postCode: POST_CODES.CUSTOMER_SERVICE },
-    { id: 8, orgId: org2.id, empName: "何慧琳", empTypeCode: EMP_TYPE_CODES.CASUAL_PT, postCode: POST_CODES.BETTING_SERVICE },
+    { id: 1, orgId: hvrcOutletOrgId, empName: "陈志明", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.BETTING_SERVICE },
+    { id: 2, orgId: hvrcOutletOrgId, empName: "李嘉欣", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.CROWD_CONTROL },
+    { id: 3, orgId: hvrcOutletOrgId, empName: "黄伟强", empTypeCode: EMP_TYPE_CODES.CONTRACT_PT, postCode: POST_CODES.BETTING_SERVICE },
+    { id: 4, orgId: hvrcOutletOrgId, empName: "张美玲", empTypeCode: EMP_TYPE_CODES.CASUAL_PT, postCode: POST_CODES.CROWD_CONTROL },
+    { id: 9, orgId: hvrcOutletOrgId, empName: "王志豪", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.BETTING_SERVICE },
+    { id: 10, orgId: hvrcOutletOrgId, empName: "陈雅婷", empTypeCode: EMP_TYPE_CODES.CONTRACT_PT, postCode: POST_CODES.CROWD_CONTROL },
+    { id: 11, orgId: hvrcOutletOrgId, empName: "林家俊", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.CROWD_CONTROL },
+    { id: 12, orgId: hvrcOutletOrgId, empName: "何嘉怡", empTypeCode: EMP_TYPE_CODES.CASUAL_PT, postCode: POST_CODES.BETTING_SERVICE },
+    { id: 13, orgId: hvrcOutletOrgId, empName: "梁文杰", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.BETTING_SERVICE },
+    { id: 14, orgId: hvrcOutletOrgId, empName: "苏晓彤", empTypeCode: EMP_TYPE_CODES.CASUAL_PT, postCode: POST_CODES.CROWD_CONTROL },
+    { id: 5, orgId: strcOutletOrgId, empName: "刘家豪", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.CUSTOMER_SERVICE },
+    { id: 6, orgId: strcOutletOrgId, empName: "吴咏诗", empTypeCode: EMP_TYPE_CODES.FULL_TIME, postCode: POST_CODES.CROWD_CONTROL },
+    { id: 7, orgId: strcOutletOrgId, empName: "林俊杰", empTypeCode: EMP_TYPE_CODES.CONTRACT_PT, postCode: POST_CODES.CUSTOMER_SERVICE },
+    { id: 8, orgId: strcOutletOrgId, empName: "何慧琳", empTypeCode: EMP_TYPE_CODES.CASUAL_PT, postCode: POST_CODES.BETTING_SERVICE },
   ];
   for (const e of employees) await prisma.dtaEmployee.create({ data: { tenantId, ...e, ...by } });
 
@@ -111,16 +114,16 @@ async function main() {
     ...Object.values(EMP_TYPE_CODES).map((empTypeCode) => ({ tenantId, schemeId: rosterableScheme.id, empTypeCode, cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_ROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_UNROSTERABLE, empEditEnable: 1, priorityRosterEnable: 0, autoGenRangeWeek: 4 })),
     ...Object.values(EMP_TYPE_CODES).map((empTypeCode) => ({ tenantId, schemeId: unrosterableScheme.id, empTypeCode, cutoffDays: 3, baselineRule: DtaBaselineRule.BASE_UNROSTERABLE, submitMode: DtaSubmitMode.MODE_ONLY_ROSTERABLE, empEditEnable: 1, priorityRosterEnable: 0, autoGenRangeWeek: 4 })),
   ] });
-  await prisma.dtaOrg.update({ where: { id: org1.id }, data: { paramSchemeId: rosterableScheme.id } });
-  await prisma.dtaOrg.update({ where: { id: org2.id }, data: { paramSchemeId: unrosterableScheme.id } });
+  await prisma.dtaOrg.update({ where: { id: hvrcOutletOrgId }, data: { paramSchemeId: rosterableScheme.id } });
+  await prisma.dtaOrg.update({ where: { id: strcOutletOrgId }, data: { paramSchemeId: unrosterableScheme.id } });
   await prisma.dtaParamSchemeAuthorization.createMany({ data: [
-    { tenantId, schemeId: rosterableScheme.id, orgId: org1.id, empTypeCode: EMP_TYPE_CODES.FULL_TIME, includeChildren: 0, ...by },
-    { tenantId, schemeId: unrosterableScheme.id, orgId: org2.id, empTypeCode: EMP_TYPE_CODES.CONTRACT_PT, includeChildren: 0, ...by },
-    { tenantId, schemeId: unrosterableScheme.id, orgId: org2.id, empTypeCode: EMP_TYPE_CODES.CASUAL_PT, includeChildren: 0, ...by },
+    { tenantId, schemeId: rosterableScheme.id, orgId: hvrcOutletOrgId, empTypeCode: EMP_TYPE_CODES.FULL_TIME, includeChildren: 0, ...by },
+    { tenantId, schemeId: unrosterableScheme.id, orgId: strcOutletOrgId, empTypeCode: EMP_TYPE_CODES.CONTRACT_PT, includeChildren: 0, ...by },
+    { tenantId, schemeId: unrosterableScheme.id, orgId: strcOutletOrgId, empTypeCode: EMP_TYPE_CODES.CASUAL_PT, includeChildren: 0, ...by },
   ] });
 
   // 生效参数组：Full Time 默认可排；两类 PT 默认不可排。
-  for (const orgId of [org1.id, org2.id]) {
+  for (const orgId of [hvrcOutletOrgId, strcOutletOrgId]) {
     await prisma.dtaParamGroup.create({
       data: {
         tenantId, orgId, empTypeCode: EMP_TYPE_CODES.FULL_TIME,
@@ -144,13 +147,13 @@ async function main() {
   // 模拟班次：日期相对香港今日计算，覆盖锁定期内、锁定期外、跨午夜与 0 时长场景
   const today = hkToday();
   const shifts = [
-    { empId: 1, orgId: org1.id, day: 1, name: "早班", start: "07:00", end: "15:00", offset: 0 },
-    { empId: 1, orgId: org1.id, day: 7, name: "夜马日班", start: "17:00", end: "23:30", offset: 0 },
-    { empId: 2, orgId: org1.id, day: 8, name: "跨午夜班", start: "22:00", end: "02:00", offset: 1 },
-    { empId: 3, orgId: org1.id, day: 9, name: "赛日兼职班", start: "11:00", end: "18:00", offset: 0 },
-    { empId: 4, orgId: org1.id, day: 9, name: "待定班次（0 时长）", start: "12:00", end: "12:00", offset: 0 },
-    { empId: 5, orgId: org2.id, day: 10, name: "中班", start: "12:00", end: "20:00", offset: 0 },
-    { empId: 7, orgId: org2.id, day: 10, name: "夜马日兼职班", start: "18:00", end: "23:00", offset: 0 },
+    { empId: 1, orgId: hvrcOutletOrgId, day: 1, name: "早班", start: "07:00", end: "15:00", offset: 0 },
+    { empId: 1, orgId: hvrcOutletOrgId, day: 7, name: "夜马日班", start: "17:00", end: "23:30", offset: 0 },
+    { empId: 2, orgId: hvrcOutletOrgId, day: 8, name: "跨午夜班", start: "22:00", end: "02:00", offset: 1 },
+    { empId: 3, orgId: hvrcOutletOrgId, day: 9, name: "赛日兼职班", start: "11:00", end: "18:00", offset: 0 },
+    { empId: 4, orgId: hvrcOutletOrgId, day: 9, name: "待定班次（0 时长）", start: "12:00", end: "12:00", offset: 0 },
+    { empId: 5, orgId: strcOutletOrgId, day: 10, name: "中班", start: "12:00", end: "20:00", offset: 0 },
+    { empId: 7, orgId: strcOutletOrgId, day: 10, name: "夜马日兼职班", start: "18:00", end: "23:00", offset: 0 },
   ];
   for (const s of shifts) {
     const businessDate = addDays(today, s.day);
